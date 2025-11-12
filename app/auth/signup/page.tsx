@@ -27,14 +27,18 @@ export default function SignUpPage() {
       if (!firebaseReady) {
         await demoAuth.signInWithGoogle();
         await refreshUser();
-        router.push('/dashboard');
+        if (typeof window !== 'undefined') {
+          window.location.href = '/dashboard.html';
+        }
         return;
       }
 
       const { signInWithGoogle } = await import('@/lib/firebase/auth');
       await signInWithGoogle();
       await refreshUser();
-      router.push('/dashboard');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard.html';
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to sign up with Google');
     } finally {
@@ -51,14 +55,18 @@ export default function SignUpPage() {
       if (!firebaseReady) {
         await demoAuth.signUp(email, password, name);
         await refreshUser();
-        router.push('/dashboard');
+        if (typeof window !== 'undefined') {
+          window.location.href = '/dashboard.html';
+        }
         return;
       }
 
       const { signUpWithEmail } = await import('@/lib/firebase/auth');
       await signUpWithEmail(email, password, name);
       await refreshUser();
-      router.push('/dashboard');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard.html';
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to sign up');
     } finally {

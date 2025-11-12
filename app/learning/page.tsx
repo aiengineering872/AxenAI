@@ -32,7 +32,6 @@ const coursesData: Omit<Course, 'modules'>[] = [
     description: 'Master the fundamentals and advanced concepts of AI Engineering',
     duration: '4 weeks',
     levels: ['beginner', 'intermediate', 'advanced'],
-    modules: [],
   },
   {
     id: 'aiml-engineering',
@@ -40,7 +39,6 @@ const coursesData: Omit<Course, 'modules'>[] = [
     description: 'Comprehensive AI and Machine Learning engineering course',
     duration: '4 weeks',
     levels: ['beginner', 'intermediate', 'advanced'],
-    modules: [],
   },
 ];
 

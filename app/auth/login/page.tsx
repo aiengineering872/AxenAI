@@ -27,14 +27,18 @@ export default function LoginPage() {
       if (!firebaseReady) {
         await demoAuth.signInWithGoogle();
         await refreshUser();
-        router.push('/dashboard');
+        if (typeof window !== 'undefined') {
+          window.location.href = '/dashboard.html';
+        }
         return;
       }
 
       const { signInWithGoogle } = await import('@/lib/firebase/auth');
       await signInWithGoogle();
       await refreshUser();
-      router.push('/dashboard');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard.html';
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to sign in with Google');
     } finally {
@@ -51,14 +55,18 @@ export default function LoginPage() {
       if (!firebaseReady) {
         await demoAuth.signIn(email, password);
         await refreshUser();
-        router.push('/dashboard');
+        if (typeof window !== 'undefined') {
+          window.location.href = '/dashboard.html';
+        }
         return;
       }
 
       const { signInWithEmail } = await import('@/lib/firebase/auth');
       await signInWithEmail(email, password);
       await refreshUser();
-      router.push('/dashboard');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard.html';
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
     } finally {
