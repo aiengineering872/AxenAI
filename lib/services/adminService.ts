@@ -153,6 +153,7 @@ export const adminService = {
     await ensureFirebase();
     const docRef = await addDoc(collection(db, 'projects'), {
       ...projectData,
+      isPublic: true,
       tags: projectData.tags ?? [],
       upvotes: projectData.upvotes ?? 0,
       comments: projectData.comments ?? 0,

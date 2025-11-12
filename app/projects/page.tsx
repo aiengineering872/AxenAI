@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { motion } from 'framer-motion';
-import { Plus, ThumbsUp, MessageSquare, Upload, Github, Tag, Star } from 'lucide-react';
+import { Plus, ThumbsUp, MessageSquare, Upload, Github, Tag, Star, X, Send, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { projectService } from '@/lib/services/projectService';
 import { formatDistanceToNow } from 'date-fns';
@@ -25,6 +25,7 @@ interface Project {
   githubLink?: string;
   isPublic: boolean;
   upvotes: number;
+  upvotedUsers?: string[];
   comments: number;
   aiReview?: {
     innovation: number;
@@ -36,74 +37,137 @@ interface Project {
   createdAt?: string | null;
 }
 
+interface Comment {
+  id: string;
+  userId: string;
+  userName: string;
+  userPhoto?: string;
+  text: string;
+  createdAt?: string | null;
+}
+
 const PROJECTS_CACHE_TTL = 60_000;
 let projectCache: { data: Project[]; timestamp: number } | null = null;
 
 export default function ProjectLabPage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [newComment, setNewComment] = useState('');
   const [newProject, setNewProject] = useState({
     title: '',
     description: '',
     tags: '',
     githubLink: '',
-    isPublic: true,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const canUpload = useMemo(() => !!user, [user]);
 
+  // Real-time projects listener
   useEffect(() => {
-    let isMounted = true;
+    let unsubscribe: (() => void) | undefined;
 
-    const loadProjects = async () => {
-      setError('');
-
-      if (projectCache && Date.now() - projectCache.timestamp < PROJECTS_CACHE_TTL) {
-        setProjects(projectCache.data);
-        setLoading(false);
-        return;
-      }
-
+    const setupListener = async () => {
       try {
         setLoading(true);
-        const results = (await projectService.listProjects()) as Project[];
-        if (!isMounted) {
-          return;
-        }
-        projectCache = { data: results, timestamp: Date.now() };
-        setProjects(results);
-      } catch (err: any) {
-        console.error('Error loading projects:', err);
-        if (isMounted) {
-          setError('Unable to load projects right now.');
-        }
-      } finally {
-        if (isMounted) {
+        unsubscribe = projectService.subscribeToProjects((updatedProjects) => {
+          setProjects(updatedProjects as Project[]);
           setLoading(false);
-        }
+          setError('');
+        });
+      } catch (err: any) {
+        console.error('Error setting up real-time listener:', err);
+        setError('Unable to load projects right now.');
+        setLoading(false);
       }
     };
 
-    void loadProjects();
+    setupListener();
 
     return () => {
-      isMounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, []);
 
-  const handleUpvote = (projectId: string) => {
-    setProjects((prev) =>
-      prev.map((project) =>
-        project.id === projectId ? { ...project, upvotes: project.upvotes + 1 } : project
-      )
-    );
+  // Real-time comments listener
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setComments([]);
+      return;
+    }
 
-    projectService
-      .incrementUpvotes(projectId, 1)
-      .catch((err) => console.error('Failed to register upvote:', err));
+    const unsubscribe = projectService.subscribeToComments(selectedProjectId, (updatedComments) => {
+      setComments(updatedComments as Comment[]);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [selectedProjectId]);
+
+  const handleUpvote = async (projectId: string) => {
+    if (!user) {
+      alert('Please sign in to upvote projects.');
+      return;
+    }
+
+    try {
+      await projectService.toggleUpvote(projectId, user.uid);
+      // Real-time listener will update the UI automatically
+    } catch (err: any) {
+      console.error('Failed to toggle upvote:', err);
+      alert(err.message || 'Failed to update upvote.');
+    }
+  };
+
+  const handleAddComment = async () => {
+    if (!selectedProjectId || !user || !newComment.trim()) {
+      return;
+    }
+
+    try {
+      await projectService.addComment(selectedProjectId, {
+        userId: user.uid,
+        userName: user.displayName || user.email || 'Anonymous',
+        userPhoto: user.photoURL || undefined,
+        text: newComment.trim(),
+      });
+      setNewComment('');
+      // Real-time listener will update comments automatically
+    } catch (err: any) {
+      console.error('Failed to add comment:', err);
+      alert(err.message || 'Failed to add comment.');
+    }
+  };
+
+  const isUpvoted = (project: Project) => {
+    return user && project.upvotedUsers?.includes(user.uid);
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!selectedProjectId) return;
+    
+    if (!confirm('Are you sure you want to delete this comment?')) {
+      return;
+    }
+
+    try {
+      await projectService.deleteComment(selectedProjectId, commentId);
+      // Real-time listener will update comments automatically
+    } catch (err: any) {
+      console.error('Failed to delete comment:', err);
+      alert(err.message || 'Failed to delete comment.');
+    }
+  };
+
+  const canDeleteComment = (comment: Comment) => {
+    return user && (comment.userId === user.uid || isAdmin);
   };
 
   const handleUpload = async () => {
@@ -123,19 +187,17 @@ export default function ProjectLabPage() {
           .map((tag) => tag.trim())
           .filter(Boolean),
         githubLink: newProject.githubLink || null,
-        isPublic: newProject.isPublic,
+        isPublic: true,
         upvotes: 0,
+        upvotedUsers: [],
         comments: 0,
         aiReview: null,
       };
 
       await projectService.createProject(payload);
-      const refreshed = (await projectService.listProjects()) as Project[];
-      projectCache = { data: refreshed, timestamp: Date.now() };
-      setProjects(refreshed);
-
+      // Real-time listener will update projects automatically
       setShowUploadModal(false);
-      setNewProject({ title: '', description: '', tags: '', githubLink: '', isPublic: true });
+      setNewProject({ title: '', description: '', tags: '', githubLink: '' });
     } catch (err: any) {
       console.error('Project upload failed:', err);
       alert(err.message || 'Failed to upload project.');
@@ -241,15 +303,22 @@ export default function ProjectLabPage() {
                 <div className="flex items-center gap-4 pt-4 border-t border-card">
                   <button
                     onClick={() => handleUpvote(project.id)}
-                    className="flex items-center gap-2 text-caption hover:text-primary transition-all"
+                    className={`flex items-center gap-2 text-caption transition-all ${
+                      isUpvoted(project)
+                        ? 'text-primary'
+                        : 'hover:text-primary'
+                    }`}
                   >
-                    <ThumbsUp className="w-5 h-5" />
+                    <ThumbsUp className={`w-5 h-5 ${isUpvoted(project) ? 'fill-current' : ''}`} />
                     {project.upvotes}
                   </button>
-                  <div className="flex items-center gap-2 text-caption">
+                  <button
+                    onClick={() => setSelectedProjectId(project.id)}
+                    className="flex items-center gap-2 text-caption hover:text-primary transition-all"
+                  >
                     <MessageSquare className="w-5 h-5" />
                     {project.comments}
-                  </div>
+                  </button>
                 </div>
               </motion.div>
             ))
@@ -322,19 +391,6 @@ export default function ProjectLabPage() {
                     style={{ color: 'var(--color-text)' }}
                   />
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="isPublic"
-                    checked={newProject.isPublic}
-                    onChange={(e) => setNewProject({ ...newProject, isPublic: e.target.checked })}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="isPublic" className="text-caption">
-                    Make project public
-                  </label>
-                </div>
               </div>
 
               <div className="flex items-center gap-4 mt-6">
@@ -353,6 +409,100 @@ export default function ProjectLabPage() {
                   Upload
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Comments Modal */}
+        {selectedProjectId && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="glass rounded-xl p-6 max-w-2xl w-full max-h-[90vh] flex flex-col"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-title">Comments</h2>
+                <button
+                  onClick={() => setSelectedProjectId(null)}
+                  className="p-2 hover:bg-card rounded-lg transition-all"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto mb-4 space-y-4">
+                {comments.length === 0 ? (
+                  <p className="text-textSecondary text-center py-8">No comments yet. Be the first to comment!</p>
+                ) : (
+                  comments.map((comment) => (
+                    <div key={comment.id} className="flex gap-3 p-3 bg-card/50 rounded-lg group hover:bg-card/70 transition-all">
+                      {comment.userPhoto ? (
+                        <img
+                          src={comment.userPhoto}
+                          alt={comment.userName}
+                          className="w-8 h-8 rounded-full"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white font-bold text-sm">
+                          {comment.userName[0]}
+                        </div>
+                      )}
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-body-strong text-sm">{comment.userName}</p>
+                            {comment.createdAt && (
+                              <p className="text-caption text-xs">
+                                {formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}
+                              </p>
+                            )}
+                          </div>
+                          {canDeleteComment(comment) && (
+                            <button
+                              onClick={() => handleDeleteComment(comment.id)}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all text-red-400 hover:text-red-300"
+                              title="Delete comment"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-body text-sm">{comment.text}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {user ? (
+                <div className="flex gap-2 pt-4 border-t border-card">
+                  <input
+                    type="text"
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAddComment();
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 bg-card border border-card rounded-lg text-text focus:outline-none focus:ring-2 focus:ring-primary placeholder:text-textSecondary/70"
+                    placeholder="Write a comment..."
+                    style={{ color: 'var(--color-text)' }}
+                  />
+                  <button
+                    onClick={handleAddComment}
+                    disabled={!newComment.trim()}
+                    className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Send className="w-4 h-4" />
+                    Send
+                  </button>
+                </div>
+              ) : (
+                <p className="text-textSecondary text-center py-4">Please sign in to add a comment.</p>
+              )}
             </motion.div>
           </div>
         )}

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Home, BookOpen, Code, FlaskConical, MessageSquare, Compass, Trophy, Award, Video, FileText, UserRound, Key } from 'lucide-react';
+import { Menu, X, Home, BookOpen, Code, FlaskConical, MessageSquare, Trophy, Award, FileText, UserRound, Key } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 const menuItems = [
@@ -13,10 +13,8 @@ const menuItems = [
   { icon: Code, label: 'Simulator', path: '/simulator' },
   { icon: FlaskConical, label: 'Projects', path: '/projects' },
   { icon: MessageSquare, label: 'Mentor', path: '/mentor' },
-  { icon: Compass, label: 'Career', path: '/career' },
   { icon: Trophy, label: 'Leaderboard', path: '/leaderboard' },
   { icon: Award, label: 'Certificates', path: '/certificates' },
-  { icon: Video, label: 'Videos', path: '/videos' },
   { icon: FileText, label: 'Practice Tests', path: '/practice-tests' },
   { icon: UserRound, label: 'Resume Builder', path: '/resume-builder' },
   { icon: Key, label: 'API Integration', path: '/api-integration' },

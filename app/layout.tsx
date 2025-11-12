@@ -4,6 +4,7 @@ import './globals.css';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ServiceWorkerRegistration } from './components/ServiceWorkerRegistration';
+import { UserActivityTracker } from '@/components/activity/UserActivityTracker';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -52,6 +53,7 @@ export default function RootLayout({
         <ServiceWorkerRegistration />
         <AuthProvider>
           <ThemeProvider>
+            <UserActivityTracker />
             {children}
           </ThemeProvider>
         </AuthProvider>

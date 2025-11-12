@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { motion } from 'framer-motion';
-import { UserRound, Download, Sparkles, Save, Plus, Trash2 } from 'lucide-react';
+import { UserRound, Download, Sparkles, Save, Plus, Trash2, Bot } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateGeminiResponse } from '@/lib/utils/gemini';
 // jsPDF will be dynamically imported
@@ -54,10 +54,104 @@ export default function ResumeBuilderPage() {
     skills: [],
     projects: [],
   });
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatingSection, setGeneratingSection] = useState<string | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState('modern');
   const [geminiApiKey, setGeminiApiKey] = useState<string | null>(null);
   const [apiKeyWarning, setApiKeyWarning] = useState<string | null>(null);
+  const [experienceLevel, setExperienceLevel] = useState<'fresher' | 'experienced'>('experienced');
+  const [pendingSkill, setPendingSkill] = useState('');
+
+  const personalInfoFields: Array<{
+    key: keyof ResumeData['personalInfo'];
+    label: string;
+    type?: string;
+    placeholder: string;
+  }> = [
+    { key: 'name', label: 'Full Name', placeholder: 'Full Name' },
+    { key: 'email', label: 'Email', type: 'email', placeholder: 'Email' },
+    { key: 'phone', label: 'Phone', type: 'tel', placeholder: 'Phone' },
+    { key: 'location', label: 'Location', placeholder: 'Location' },
+    { key: 'linkedin', label: 'LinkedIn URL', placeholder: 'LinkedIn URL' },
+    { key: 'github', label: 'GitHub URL', placeholder: 'GitHub URL' },
+  ];
+
+  const canUseAI = useMemo(() => Boolean(geminiApiKey) && generatingSection === null, [geminiApiKey, generatingSection]);
+  const isResumeReady = useMemo(() => {
+    const { personalInfo } = resumeData;
+    return Boolean(
+      personalInfo.name &&
+      personalInfo.email &&
+      personalInfo.phone &&
+      personalInfo.location &&
+      personalInfo.linkedin &&
+      personalInfo.github
+    );
+  }, [resumeData]);
+
+  const experienceComplete = useMemo(() => {
+    if (experienceLevel === 'fresher') return true;
+    return (
+      resumeData.experience.length > 0 &&
+      resumeData.experience.every(
+        (exp) => exp.title && exp.company && exp.duration && exp.description
+      )
+    );
+  }, [resumeData.experience, experienceLevel]);
+
+  const educationComplete = useMemo(
+    () =>
+      resumeData.education.length > 0 &&
+      resumeData.education.every((edu) => edu.degree && edu.institution && edu.year),
+    [resumeData.education]
+  );
+
+  const skillsComplete = useMemo(
+    () => resumeData.skills.length > 0 || pendingSkill.trim().length > 0,
+    [resumeData.skills, pendingSkill]
+  );
+
+  const projectsComplete = useMemo(
+    () =>
+      resumeData.projects.length > 0 &&
+      resumeData.projects.every((proj) => proj.name && proj.description),
+    [resumeData.projects]
+  );
+
+  const missingSections = useMemo(() => {
+    const missing: string[] = [];
+    if (!isResumeReady) missing.push('personal information');
+    if (!skillsComplete) missing.push('skills');
+    if (!educationComplete) missing.push('education');
+    if (!projectsComplete) missing.push('projects');
+    if (!experienceComplete) missing.push('experience');
+    return missing;
+  }, [isResumeReady, skillsComplete, educationComplete, projectsComplete, experienceComplete]);
+
+  const canGenerateFullResume = useMemo(
+    () =>
+      Boolean(geminiApiKey) &&
+      generatingSection === null &&
+      missingSections.length === 0,
+    [geminiApiKey, generatingSection, missingSections.length]
+  );
+
+  const commitPendingSkill = (snapshot: ResumeData): ResumeData => {
+    if (!pendingSkill.trim()) {
+      return snapshot;
+    }
+    const newSkills = [
+      ...snapshot.skills,
+      ...pendingSkill
+        .split(',')
+        .map((skill) => skill.trim())
+        .filter(Boolean),
+    ];
+    setPendingSkill('');
+    const uniqueSkills = Array.from(new Set(newSkills));
+    const updated = { ...snapshot, skills: uniqueSkills };
+    setResumeData(updated);
+    return updated;
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -122,15 +216,28 @@ export default function ResumeBuilderPage() {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [user]);
 
+  const extractJson = (raw: string) => {
+    const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (jsonMatch) {
+      return jsonMatch[1].trim();
+    }
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      return raw.slice(firstBrace, lastBrace + 1);
+    }
+    return raw.trim();
+  };
+
   const generateWithAI = async (section: string) => {
     if (!geminiApiKey) {
       alert('Gemini API key not found. Add your Gemini API key (service: "Gemini" or "Google") in the API Integration tab to use AI generation.');
       return;
     }
 
-    setIsGenerating(true);
+    setGeneratingSection(section);
     try {
-      const prompt = `Generate professional ${section} content for an AI/ML engineer resume. Return only the content, no explanations. Make it concise and impactful.`;
+      const prompt = `Generate professional ${section} content for an ${experienceLevel === 'fresher' ? 'entry-level' : 'experienced'} AI/ML engineer resume. Return only the content, no explanations. Make it concise and impactful.`;
       const content = await generateGeminiResponse(prompt, undefined, undefined, geminiApiKey);
       
       if (section === 'summary') {
@@ -141,33 +248,155 @@ export default function ResumeBuilderPage() {
       const message = error instanceof Error ? error.message : 'Failed to generate content. Please check your Gemini API key.';
       alert(message);
     } finally {
-      setIsGenerating(false);
+      setGeneratingSection((prev) => (prev === section ? null : prev));
+    }
+  };
+
+  const generateFullResume = async () => {
+    if (!geminiApiKey) {
+      alert('Gemini API key not found. Add your Gemini API key (service: "Gemini" or "Google") in the API Integration tab to use AI generation.');
+      return;
+    }
+    if (missingSections.length > 0) {
+      alert(`Please complete the following before generating the full resume: ${missingSections.join(', ')}.`);
+      return;
+    }
+
+    const workingData = commitPendingSkill(resumeData);
+
+    setGeneratingSection('full');
+    try {
+      const prompt = `You are an expert AI resume writer. Using the following user-provided details, generate a polished ${experienceLevel === 'fresher' ? 'entry-level' : 'experienced'} AI/ML engineer resume.
+Return ONLY valid JSON matching this TypeScript interface:
+{
+  "summary": string,
+  "skills": string[],
+  "experience": Array<{ "title": string, "company": string, "duration": string, "description": string }>,
+  "education": Array<{ "degree": string, "institution": string, "year": string }>,
+  "projects": Array<{ "name": string, "description": string, "technologies": string[] }>
+}
+
+User data (fill in missing gaps, rewrite and enhance existing content where provided):
+Personal info: ${JSON.stringify(workingData.personalInfo, null, 2)}
+Current summary: ${workingData.summary || '""'}
+Skills: ${workingData.skills.length ? workingData.skills.join(', ') : 'None provided'}
+Experience entries: ${workingData.experience.length ? JSON.stringify(workingData.experience, null, 2) : 'None provided'}
+Education entries: ${workingData.education.length ? JSON.stringify(workingData.education, null, 2) : 'None provided'}
+Projects: ${workingData.projects.length ? JSON.stringify(workingData.projects, null, 2) : 'None provided'}
+
+Rules:
+- Tailor the content for AI/ML engineering roles.
+- Keep experience bullet descriptions concise but impactful.
+- For missing fields, craft realistic entries aligned with AI/ML skills.
+- Never include Markdown fencing or commentary—JSON only.`;
+
+      const raw = await generateGeminiResponse(prompt, undefined, undefined, geminiApiKey);
+      console.debug('[Resume Builder] Gemini raw response:', raw);
+      const jsonPayload = extractJson(raw);
+      console.debug('[Resume Builder] Extracted JSON payload:', jsonPayload);
+      let parsed: any;
+      try {
+        parsed = JSON.parse(jsonPayload);
+      } catch (parseError) {
+        console.error('Failed to parse Gemini JSON:', parseError);
+        alert('Gemini returned data in an unexpected format. Please try again.\n\nRaw response:\n' + raw);
+        return;
+      }
+
+      const normalisedProjects = Array.isArray(parsed.projects)
+        ? parsed.projects.map((proj: any) => ({
+            name: String(proj?.name ?? '').trim(),
+            description: String(proj?.description ?? '').trim(),
+            technologies: Array.isArray(proj?.technologies)
+              ? proj.technologies.filter((tech: any) => typeof tech === 'string' && tech.trim())
+              : typeof proj?.technologies === 'string'
+                ? proj.technologies
+                    .split(',')
+                    .map((tech: string) => tech.trim())
+                    .filter(Boolean)
+                : [],
+          }))
+        : null;
+
+      const normalisedExperience = Array.isArray(parsed.experience)
+        ? parsed.experience.map((exp: any) => ({
+            title: String(exp?.title ?? '').trim(),
+            company: String(exp?.company ?? '').trim(),
+            duration: String(exp?.duration ?? '').trim(),
+            description: String(exp?.description ?? '').trim(),
+          }))
+        : null;
+
+      const normalisedEducation = Array.isArray(parsed.education)
+        ? parsed.education.map((edu: any) => ({
+            degree: String(edu?.degree ?? '').trim(),
+            institution: String(edu?.institution ?? '').trim(),
+            year: String(edu?.year ?? '').trim(),
+          }))
+        : null;
+
+      const normalisedSkills = Array.isArray(parsed.skills)
+        ? parsed.skills.filter((skill: any) => typeof skill === 'string' && skill.trim())
+        : typeof parsed.skills === 'string'
+          ? parsed.skills
+              .split(',')
+              .map((skill: string) => skill.trim())
+              .filter(Boolean)
+          : null;
+
+      setResumeData((prev) => ({
+        ...prev,
+        summary: typeof parsed.summary === 'string' && parsed.summary.trim() ? parsed.summary.trim() : prev.summary,
+        skills: normalisedSkills && normalisedSkills.length > 0 ? normalisedSkills : prev.skills,
+        experience: normalisedExperience && normalisedExperience.length > 0 ? normalisedExperience : prev.experience,
+        education: normalisedEducation && normalisedEducation.length > 0 ? normalisedEducation : prev.education,
+        projects: normalisedProjects && normalisedProjects.length > 0 ? normalisedProjects : prev.projects,
+      }));
+    } catch (error) {
+      console.error('Full resume generation failed:', error);
+      const message = error instanceof Error ? error.message : 'Failed to generate resume content. Please verify your Gemini API key and try again.';
+      alert(message);
+    } finally {
+      setGeneratingSection((prev) => (prev === 'full' ? null : prev));
     }
   };
 
   const exportToPDF = async () => {
     const { default: jsPDF } = await import('jspdf');
     const doc = new jsPDF();
-    let yPos = 20;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const centerX = pageWidth / 2;
+    let yPos = 25;
 
     // Header
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 107, 53);
-    doc.text(resumeData.personalInfo.name, 20, yPos);
+    doc.text(resumeData.personalInfo.name || 'Your Name', centerX, yPos, { align: 'center' });
     yPos += 10;
 
     // Contact Info
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
-    const contactInfo = [
+    const contactSegments = [
       resumeData.personalInfo.email,
       resumeData.personalInfo.phone,
       resumeData.personalInfo.location,
-    ].filter(Boolean).join(' | ');
-    doc.text(contactInfo, 20, yPos);
-    yPos += 15;
+      resumeData.personalInfo.linkedin,
+      resumeData.personalInfo.github,
+    ].filter(Boolean);
+    if (contactSegments.length > 0) {
+      const contactInfo = contactSegments.join(' | ');
+      const contactLines = doc.splitTextToSize(contactInfo, 180);
+      contactLines.forEach((line) => {
+        doc.text(line, centerX, yPos, { align: 'center' });
+        yPos += 6;
+      });
+    } else {
+      yPos += 6;
+    }
+    yPos += 6;
 
     // Summary
     if (resumeData.summary) {
@@ -309,68 +538,33 @@ export default function ResumeBuilderPage() {
             {/* Personal Info */}
             <div className="glass p-6 rounded-xl">
               <h2 className="text-section mb-4">Personal Information</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  placeholder="Full Name"
-                  value={resumeData.personalInfo.name}
-                  onChange={(e) => setResumeData({
-                    ...resumeData,
-                    personalInfo: { ...resumeData.personalInfo, name: e.target.value }
-                  })}
-                  className="w-full px-4 py-2 bg-card text-text rounded-lg"
-                />
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={resumeData.personalInfo.email}
-                  onChange={(e) => setResumeData({
-                    ...resumeData,
-                    personalInfo: { ...resumeData.personalInfo, email: e.target.value }
-                  })}
-                  className="w-full px-4 py-2 bg-card text-text rounded-lg"
-                />
-                <input
-                  type="tel"
-                  placeholder="Phone"
-                  value={resumeData.personalInfo.phone}
-                  onChange={(e) => setResumeData({
-                    ...resumeData,
-                    personalInfo: { ...resumeData.personalInfo, phone: e.target.value }
-                  })}
-                  className="w-full px-4 py-2 bg-card text-text rounded-lg"
-                />
-                <input
-                  type="text"
-                  placeholder="Location"
-                  value={resumeData.personalInfo.location}
-                  onChange={(e) => setResumeData({
-                    ...resumeData,
-                    personalInfo: { ...resumeData.personalInfo, location: e.target.value }
-                  })}
-                  className="w-full px-4 py-2 bg-card text-text rounded-lg"
-                />
-                <input
-                  type="text"
-                  placeholder="LinkedIn URL"
-                  value={resumeData.personalInfo.linkedin}
-                  onChange={(e) => setResumeData({
-                    ...resumeData,
-                    personalInfo: { ...resumeData.personalInfo, linkedin: e.target.value }
-                  })}
-                  className="w-full px-4 py-2 bg-card text-text rounded-lg"
-                />
-                <input
-                  type="text"
-                  placeholder="GitHub URL"
-                  value={resumeData.personalInfo.github}
-                  onChange={(e) => setResumeData({
-                    ...resumeData,
-                    personalInfo: { ...resumeData.personalInfo, github: e.target.value }
-                  })}
-                  className="w-full px-4 py-2 bg-card text-text rounded-lg"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {personalInfoFields.map((field) => (
+                  <div key={field.key} className="flex flex-col gap-2">
+                    <label className="text-caption text-textSecondary uppercase tracking-wide">
+                      {field.label}
+                      <span className="text-primary ml-1">*</span>
+                    </label>
+                    <input
+                      type={field.type ?? 'text'}
+                      placeholder={field.placeholder}
+                      value={resumeData.personalInfo[field.key] || ''}
+                      onChange={(e) =>
+                        setResumeData({
+                          ...resumeData,
+                          personalInfo: { ...resumeData.personalInfo, [field.key]: e.target.value },
+                        })
+                      }
+                      className="w-full px-4 py-2 bg-card text-text rounded-lg border border-transparent focus:border-primary focus:ring-2 focus:ring-primary/40 transition-all"
+                    />
+                  </div>
+                ))}
               </div>
+              {!isResumeReady && (
+                <p className="mt-4 text-caption text-yellow-400">
+                  Please fill in all personal information fields above to enable AI resume generation.
+                </p>
+              )}
             </div>
 
             {/* Summary */}
@@ -379,7 +573,7 @@ export default function ResumeBuilderPage() {
                 <h2 className="text-section">Professional Summary</h2>
                 <button
                   onClick={() => generateWithAI('summary')}
-                  disabled={isGenerating || !geminiApiKey}
+                  disabled={!geminiApiKey || generatingSection !== null}
                   title={geminiApiKey ? undefined : 'Add your Gemini API key in API Integration to enable AI generation'}
                   className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
                     geminiApiKey
@@ -388,7 +582,7 @@ export default function ResumeBuilderPage() {
                   }`}
                 >
                   <Sparkles className="w-4 h-4" />
-                  {isGenerating ? 'Generating...' : 'AI Generate'}
+                  {generatingSection === 'summary' ? 'Generating...' : 'AI Generate'}
                 </button>
               </div>
               <textarea
@@ -424,16 +618,41 @@ export default function ResumeBuilderPage() {
               <input
                 type="text"
                 placeholder="Add skill and press Enter"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && e.currentTarget.value) {
-                    setResumeData({
-                      ...resumeData,
-                      skills: [...resumeData.skills, e.currentTarget.value]
-                    });
-                    e.currentTarget.value = '';
+                value={pendingSkill}
+                onChange={(e) => setPendingSkill(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const entries = pendingSkill
+                      .split(',')
+                      .map((item) => item.trim())
+                      .filter(Boolean);
+                    if (entries.length > 0) {
+                      const unique = Array.from(
+                        new Set([...resumeData.skills, ...entries])
+                      );
+                      setResumeData({ ...resumeData, skills: unique });
+                      setPendingSkill('');
+                    }
                   }
                 }}
-                className="w-full px-4 py-2 bg-card text-text rounded-lg"
+                onBlur={() => {
+                  const trimmed = pendingSkill.trim();
+                  if (trimmed) {
+                    const entries = trimmed
+                      .split(',')
+                      .map((item) => item.trim())
+                      .filter(Boolean);
+                    if (entries.length > 0) {
+                      const unique = Array.from(
+                        new Set([...resumeData.skills, ...entries])
+                      );
+                      setResumeData({ ...resumeData, skills: unique });
+                    }
+                    setPendingSkill('');
+                  }
+                }}
+                className="w-full px-4 py-2 bg-card text-text rounded-lg border border-transparent focus:border-primary focus:ring-2 focus:ring-primary/40 transition-all"
               />
             </div>
 
@@ -450,6 +669,23 @@ export default function ResumeBuilderPage() {
                 </button>
               </div>
               <div className="space-y-4">
+              <div className="flex gap-2 items-center">
+                <span className="text-caption uppercase tracking-wide text-textSecondary">Experience Level:</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setExperienceLevel('fresher')}
+                    className={`px-3 py-1 rounded-lg text-caption transition-all ${experienceLevel === 'fresher' ? 'bg-primary text-white' : 'bg-card text-text hover:bg-card/80'}`}
+                  >
+                    Fresher
+                  </button>
+                  <button
+                    onClick={() => setExperienceLevel('experienced')}
+                    className={`px-3 py-1 rounded-lg text-caption transition-all ${experienceLevel === 'experienced' ? 'bg-primary text-white' : 'bg-card text-text hover:bg-card/80'}`}
+                  >
+                    Experienced
+                  </button>
+                </div>
+              </div>
                 {resumeData.experience.map((exp, index) => (
                   <div key={index} className="p-4 bg-card/50 rounded-lg space-y-3">
                     <div className="flex justify-end">
@@ -643,6 +879,45 @@ export default function ResumeBuilderPage() {
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* AI Full Resume Generation */}
+          <div className="glass p-6 rounded-xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-section mb-2 flex items-center gap-2">
+                  <Bot className="w-5 h-5 text-primary" />
+                  AI Resume Draft
+                </h2>
+                <p className="text-body">
+                  Let Gemini craft a complete resume from your details. Review and tweak the generated content before exporting.
+                </p>
+              </div>
+              <button
+                onClick={generateFullResume}
+                disabled={!canGenerateFullResume}
+                title={
+                  !geminiApiKey
+                    ? 'Add your Gemini API key in API Integration to enable AI generation'
+                    : missingSections.length > 0
+                    ? `Complete: ${missingSections.join(', ')}`
+                    : undefined
+                }
+                className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 ${
+                  canGenerateFullResume
+                    ? 'bg-primary hover:bg-primary/90 text-white disabled:opacity-50'
+                    : 'bg-card text-text opacity-70 cursor-not-allowed'
+                }`}
+              >
+                <Bot className="w-4 h-4" />
+                {generatingSection === 'full' ? 'Generating...' : 'Generate Full Resume'}
+              </button>
+            </div>
+            {missingSections.length > 0 && (
+              <p className="mt-4 text-caption text-yellow-400">
+                Complete the following sections before generating: {missingSections.join(', ')}.
+              </p>
+            )}
           </div>
 
           {/* Preview & Actions */}

@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { motion } from 'framer-motion';
-import { Play, Download, Upload, Trash2, Loader2 } from 'lucide-react';
+import { Play, Upload, Trash2, Loader2 } from 'lucide-react';
 
 // Declare Pyodide types
 declare global {
@@ -11,6 +11,9 @@ declare global {
     loadPyodide: (config?: any) => Promise<any>;
   }
 }
+
+const HTML_MARKER = '__HTML_OUTPUT__';
+type RichOutput = { type: 'html' | 'image' | 'text'; value: string };
 
 export default function CodeSimulatorPage() {
   const [code, setCode] = useState(`# Welcome to AI Code Simulator
@@ -44,6 +47,11 @@ print("Hello from AI Code Simulator!")`);
   const [initializing, setInitializing] = useState(true);
   const [mounted, setMounted] = useState(false);
   const pyodideRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [datasetInfo, setDatasetInfo] = useState('');
+  const [datasetPath, setDatasetPath] = useState('');
+  const [datasetExt, setDatasetExt] = useState('csv');
+  const [richOutputs, setRichOutputs] = useState<RichOutput[]>([]);
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -89,6 +97,16 @@ print("Hello from AI Code Simulator!")`);
             'scikit-learn',
           ]);
 
+          try {
+            if (typeof pyodideRef.current.runPythonAsync === 'function') {
+              await pyodideRef.current.runPythonAsync('import matplotlib; matplotlib.use("Agg")');
+            } else {
+              pyodideRef.current.runPython('import matplotlib; matplotlib.use("Agg")');
+            }
+          } catch (matplotlibError) {
+            console.warn('Failed to set matplotlib backend:', matplotlibError);
+          }
+
           // Set up stdout capture
           pyodideRef.current.setStdout({
             batched: (text: string) => {
@@ -120,35 +138,199 @@ print("Hello from AI Code Simulator!")`);
     setLoading(true);
     setError('');
     setOutput('');
+    setRichOutputs([]);
 
     try {
-      // Capture stdout
-      let capturedOutput = '';
-      pyodideRef.current.setStdout({
-        batched: (text: string) => {
-          capturedOutput += text;
-          setOutput(capturedOutput);
-        },
-      });
+      const pythonResult = await pyodideRef.current.runPythonAsync(`
+import io
+import ast
+import base64
+import traceback
+from contextlib import redirect_stdout
 
-      // Set up stderr
-      pyodideRef.current.setStderr({
-        batched: (text: string) => {
-          setError((prev) => prev + text);
-        },
-      });
+HTML_MARKER = "${HTML_MARKER}"
+code_str = ${JSON.stringify(code)}
 
-      // Execute the code
-      await pyodideRef.current.runPython(code);
-      
-      // Check if we got any output
-      if (!capturedOutput) {
+namespace = globals()
+stdout_buffer = io.StringIO()
+html_output_ref = {'value': None}
+error_text = ""
+display_outputs = []
+
+def _record_html(html_value):
+    if not html_value:
+        return
+    display_outputs.append({'type': 'html', 'value': html_value})
+    if html_output_ref['value'] is None:
+        html_output_ref['value'] = html_value
+
+def display(obj=None):
+    try:
+        import pandas as _pd
+    except Exception:
+        _pd = None
+
+    if _pd is not None:
+        if isinstance(obj, _pd.Series):
+            _record_html(obj.to_frame(name=obj.name or 'value').to_html())
+            try:
+                stdout_buffer.write(obj.to_string() + '\\n')
+            except Exception:
+                stdout_buffer.write(str(obj) + '\\n')
+            return
+        if isinstance(obj, _pd.DataFrame):
+            try:
+                _record_html(obj.to_html(index=False))
+            except Exception:
+                _record_html(obj.to_html())
+            try:
+                stdout_buffer.write(obj.head(20).to_string() + '\\n')
+            except Exception:
+                stdout_buffer.write(str(obj) + '\\n')
+            return
+
+    try:
+        from matplotlib.figure import Figure
+        import matplotlib.pyplot as _plt
+        import matplotlib.axes
+    except Exception:
+        Figure = None
+        _plt = None
+
+    if Figure is not None and isinstance(obj, Figure):
+        buf = io.BytesIO()
+        obj.savefig(buf, format='png', bbox_inches='tight')
+        display_outputs.append({'type': 'image', 'value': base64.b64encode(buf.getvalue()).decode('utf-8')})
+        stdout_buffer.write('[Matplotlib figure displayed]\\n')
+        if _plt:
+            _plt.close(obj)
+        return
+
+    if Figure is not None and _plt is not None:
+        try:
+            import matplotlib.axes as _axes
+            if isinstance(obj, _axes.Axes):
+                fig = obj.figure
+                buf = io.BytesIO()
+                fig.savefig(buf, format='png', bbox_inches='tight')
+                display_outputs.append({'type': 'image', 'value': base64.b64encode(buf.getvalue()).decode('utf-8')})
+                stdout_buffer.write('[Matplotlib plot displayed]\\n')
+                _plt.close(fig)
+                return
+        except Exception:
+            pass
+
+    if hasattr(obj, '_repr_html_'):
+        try:
+            html_value = obj._repr_html_()
+            if html_value:
+                _record_html(html_value)
+                try:
+                    stdout_buffer.write(str(obj) + '\\n')
+                except Exception:
+                    pass
+                return
+        except Exception:
+            pass
+
+    text_value = str(obj)
+    display_outputs.append({'type': 'text', 'value': text_value})
+    stdout_buffer.write(text_value + '\\n')
+
+namespace['display'] = display
+
+try:
+    import matplotlib.pyplot as _patched_plt
+    def _capture_show(*args, **kwargs):
+        fig = _patched_plt.gcf()
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', bbox_inches='tight')
+        display_outputs.append({'type': 'image', 'value': base64.b64encode(buf.getvalue()).decode('utf-8')})
+        _patched_plt.close(fig)
+    _patched_plt.show = _capture_show
+except Exception:
+    pass
+
+try:
+    tree = ast.parse(code_str, mode='exec')
+    last_expr = None
+    if tree.body and isinstance(tree.body[-1], ast.Expr):
+        last_expr = ast.Expression(tree.body[-1].value)
+        tree.body = tree.body[:-1]
+
+    compiled = compile(tree, '<user-code>', 'exec')
+
+    with redirect_stdout(stdout_buffer):
+        exec(compiled, namespace)
+        if last_expr is not None:
+            value = eval(compile(last_expr, '<user-code>', 'eval'), namespace)
+            if value is not None:
+                try:
+                    display(value)
+                except Exception:
+                    display_outputs.append({'type': 'text', 'value': str(value)})
+
+    output_text = stdout_buffer.getvalue()
+
+    if HTML_MARKER in output_text:
+        before, after = output_text.split(HTML_MARKER, 1)
+        output_text = before
+        after = after.strip()
+        if after:
+            _record_html(after)
+
+except Exception:
+    error_text = traceback.format_exc()
+    output_text = stdout_buffer.getvalue()
+
+html_output = html_output_ref['value']
+
+{'output': output_text, 'error': error_text, 'html': html_output, 'displays': display_outputs}
+`);
+
+      let result = pythonResult;
+      if (pythonResult && typeof pythonResult.toJs === 'function') {
+        result = pythonResult.toJs({ dict_converter: Object.fromEntries });
+        if (typeof pythonResult.destroy === 'function') {
+          pythonResult.destroy();
+        }
+      }
+      const outputText = result.output || '';
+      const errorText = result.error || '';
+      const html = result.html || null;
+      const displays = Array.isArray(result.displays) ? result.displays : [];
+
+      if (errorText) {
+        setError(errorText);
+      }
+      if (outputText.trim()) {
+        setOutput(outputText.trim());
+      } else if (!errorText) {
         setOutput('Code executed successfully. No output generated.');
       }
+      const combinedRich: RichOutput[] = [];
+      if (displays.length) {
+        displays.forEach((item: any) => {
+          if (item && typeof item === 'object' && typeof item.type === 'string' && typeof item.value === 'string') {
+            const type = item.type as RichOutput['type'];
+            if (type === 'html' || type === 'image' || type === 'text') {
+              combinedRich.push({ type, value: item.value });
+            }
+          } else if (typeof item === 'string') {
+            combinedRich.push({ type: 'text', value: item });
+          }
+        });
+      } else if (html) {
+        combinedRich.push({
+          type: 'html',
+          value: typeof html === 'string' ? html : String(html),
+        });
+      }
+      setRichOutputs(combinedRich);
     } catch (err: any) {
       const errorMsg = err.toString();
       setError(errorMsg);
-      // Keep output if it exists (might have partial output before error)
+      setRichOutputs([]);
     } finally {
       setLoading(false);
     }
@@ -158,11 +340,126 @@ print("Hello from AI Code Simulator!")`);
     setCode('');
     setOutput('');
     setError('');
+    setRichOutputs([]);
   };
 
   const clearOutput = () => {
     setOutput('');
     setError('');
+    setRichOutputs([]);
+  };
+
+  const handleUploadClick = () => {
+    if (!pyodideReady || !pyodideRef.current) {
+      setError('Pyodide must finish initializing before you can upload a dataset.');
+      return;
+    }
+    fileInputRef.current?.click();
+  };
+
+  const sanitizeFileName = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, '_');
+
+  const getReadStatement = (pathExpression: string, ext: string) => {
+    switch (ext) {
+      case 'json':
+        return `pd.read_json(${pathExpression})`;
+      case 'tsv':
+        return `pd.read_csv(${pathExpression}, sep="\\t")`;
+      case 'txt':
+        return `pd.read_csv(${pathExpression}, sep="\\s+", engine="python")`;
+      default:
+        return `pd.read_csv(${pathExpression})`;
+    }
+  };
+
+  const handleDatasetUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (!pyodideReady || !pyodideRef.current) {
+      setError('Pyodide is not ready yet. Please wait for initialization before uploading datasets.');
+      return;
+    }
+
+    try {
+      setError('');
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      const safeName = sanitizeFileName(file.name);
+      const virtualPath = `/tmp/${safeName}`;
+
+      pyodideRef.current.FS.writeFile(virtualPath, uint8Array);
+      setDatasetPath(virtualPath);
+      const extension = file.name.split('.').pop()?.toLowerCase() ?? 'csv';
+      setDatasetExt(extension);
+      setDatasetInfo(`📁 Dataset "${file.name}" uploaded. Previewing first 10 rows below.`);
+      setError('');
+
+      const previewScript = `
+import pandas as pd
+_path = r"${virtualPath}"
+_df = ${getReadStatement('_path', extension)}
+_df.head(10).to_html(index=False)
+`;
+
+      try {
+        const previewHtml =
+          typeof pyodideRef.current.runPythonAsync === 'function'
+            ? await pyodideRef.current.runPythonAsync(previewScript)
+            : pyodideRef.current.runPython(previewScript);
+
+        const previewHtmlString =
+          typeof previewHtml === 'string'
+            ? previewHtml
+            : previewHtml && typeof previewHtml.toString === 'function'
+            ? previewHtml.toString()
+            : '';
+
+        setOutput(`Preview of "${file.name}" (first 10 rows):`);
+        setRichOutputs(
+          previewHtmlString ? [{ type: 'html', value: previewHtmlString }] : []
+        );
+      } catch (previewError: any) {
+        console.error('Failed to generate preview:', previewError);
+        setRichOutputs([]);
+        setOutput(
+          `Dataset "${file.name}" uploaded to ${virtualPath}, but preview failed. Run your own code to inspect it.`
+        );
+      }
+    } catch (uploadError: any) {
+      console.error('Failed to upload dataset:', uploadError);
+      setError(`Failed to upload dataset: ${uploadError.message ?? uploadError}`);
+      setDatasetInfo('');
+      setDatasetPath('');
+      setRichOutputs([]);
+    } finally {
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
+  const insertDatasetSnippet = () => {
+    if (!datasetPath) {
+      setError('Upload a dataset before inserting the helper snippet.');
+      return;
+    }
+
+    const snippet = `# Load uploaded dataset
+import pandas as pd
+
+dataset_path = r"${datasetPath}"
+df = ${getReadStatement('dataset_path', datasetExt)}
+
+print("Dataset shape:", df.shape)
+print("${HTML_MARKER}" + df.head(20).to_html(index=False))`;
+
+    setCode(snippet);
+    setError('');
+    setOutput('Ready to inspect the uploaded dataset. Run the code to view the table and continue your analysis.');
+    setRichOutputs([]);
   };
 
   const loadExample = (example: string) => {
@@ -224,15 +521,16 @@ import numpy as np
 
 # Create sample DataFrame
 data = {
-    'Name': ['Alice', 'Bob', 'Charlie', 'Diana'],
-    'Age': [25, 30, 35, 28],
-    'Score': [85, 90, 88, 92]
+    "Name": ["Alice", "Bob", "Charlie", "Diana"],
+    "Age": [25, 30, 35, 28],
+    "Score": [85, 90, 88, 92]
 }
 
 df = pd.DataFrame(data)
 print("DataFrame:")
 print(df)
-print(f"\nAverage Score: {df['Score'].mean():.2f}")`,
+mean_score = df["Score"].mean()
+print("Average Score: {:.2f}".format(mean_score))`,
       genai: `# GenAI Example - Using OpenAI-style API calls
 # Note: For real API calls, you'll need to handle API keys securely
 # This example shows the pattern
@@ -262,6 +560,9 @@ print(json.dumps(result, indent=2))
 # But API keys need to be handled securely (backend proxy recommended)`,
     };
     setCode(examples[example] || '');
+    setOutput('');
+    setError('');
+    setRichOutputs([]);
   };
 
   return (
@@ -332,6 +633,20 @@ print(json.dumps(result, indent=2))
                   GenAI Example
                 </button>
                 <button
+                  onClick={handleUploadClick}
+                  className="px-3 py-1 text-xs bg-primary/80 hover:bg-primary/90 text-white rounded transition-all flex items-center gap-1"
+                >
+                  <Upload className="w-3 h-3" />
+                  Upload Dataset
+                </button>
+                <button
+                  onClick={insertDatasetSnippet}
+                  className="px-3 py-1 text-xs bg-card hover:bg-card/80 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!datasetPath}
+                >
+                  Load Uploaded Dataset
+                </button>
+                <button
                   onClick={clearCode}
                   className="p-2 hover:bg-card/80 rounded transition-all"
                   aria-label="Clear code"
@@ -340,6 +655,13 @@ print(json.dumps(result, indent=2))
                 </button>
               </div>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.json,.tsv,.txt"
+              hidden
+              onChange={handleDatasetUpload}
+            />
             <textarea
               value={code}
               onChange={(e) => setCode(e.target.value)}
@@ -355,6 +677,9 @@ print(json.dumps(result, indent=2))
               }}
             />
             <div className="bg-card/50 p-4 border-t border-card">
+              {datasetInfo && (
+                <div className="mb-3 text-xs text-green-400">{datasetInfo}</div>
+              )}
               <button
                 onClick={executeCode}
                 disabled={loading || !code.trim() || !pyodideReady || initializing || !mounted}
@@ -383,7 +708,7 @@ print(json.dumps(result, indent=2))
           >
             <div className="bg-card/50 p-4 border-b border-card flex items-center justify-between">
               <span className="text-sm font-medium text-text">Console Output</span>
-              {(output || error) && (
+              {(output || error || richOutputs.length) && (
                 <button
                   onClick={clearOutput}
                   className="px-3 py-1 text-xs bg-card hover:bg-card/80 rounded transition-all text-textSecondary hover:text-text"
@@ -393,26 +718,74 @@ print(json.dumps(result, indent=2))
                 </button>
               )}
             </div>
-            <div className="p-4 h-[500px] overflow-auto" style={{ backgroundColor: 'rgba(10, 17, 40, 0.9)' }}>
+            <div className="p-4 h-[500px] overflow-auto space-y-4" style={{ backgroundColor: 'rgba(10, 17, 40, 0.9)' }}>
               {error ? (
                 <>
-                  <pre className="text-red-400 font-mono text-sm whitespace-pre-wrap mb-2 break-words">
+                  <pre className="text-red-400 font-mono text-sm whitespace-pre-wrap break-words">
                     {error}
                   </pre>
                   {output && (
-                    <pre className="text-textSecondary font-mono text-sm whitespace-pre-wrap mt-2 border-t border-card pt-2 break-words">
+                    <pre className="text-textSecondary font-mono text-sm whitespace-pre-wrap border-t border-card pt-2 break-words">
                       {output}
                     </pre>
                   )}
                 </>
-              ) : output ? (
-                <pre className="text-textSecondary font-mono text-sm whitespace-pre-wrap break-words" style={{ color: '#a0aec0' }}>
-                  {output}
-                </pre>
               ) : (
-                <p className="text-textSecondary text-sm" style={{ color: '#a0aec0' }}>
-                  Output will appear here after code execution...
-                </p>
+                <>
+                  {output && (
+                    <pre className="text-textSecondary font-mono text-sm whitespace-pre-wrap break-words" style={{ color: '#a0aec0' }}>
+                      {output}
+                    </pre>
+                  )}
+                  {richOutputs.map((item, index) => {
+                    if (item.type === 'html') {
+                      return (
+                        <div
+                          key={`html-${index}`}
+                          className="overflow-auto rounded-lg border border-card/60 bg-card/40 p-3"
+                          style={{ color: '#e2e8f0' }}
+                          dangerouslySetInnerHTML={{
+                            __html: `<style>
+                              table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+                              th, td { border: 1px solid rgba(148, 163, 184, 0.35); padding: 6px 10px; text-align: left; }
+                              th { background-color: rgba(59, 130, 246, 0.15); color: #f8fafc; }
+                              tr:nth-child(even) { background-color: rgba(148, 163, 184, 0.08); }
+                            </style>${item.value}`,
+                          }}
+                        />
+                      );
+                    }
+                    if (item.type === 'image') {
+                      return (
+                        <div
+                          key={`img-${index}`}
+                          className="overflow-auto rounded-lg border border-card/60 bg-card/40 p-3 flex justify-center"
+                          style={{ color: '#e2e8f0' }}
+                        >
+                          <img
+                            src={`data:image/png;base64,${item.value}`}
+                            alt="Plot output"
+                            className="max-h-96 w-full object-contain"
+                          />
+                        </div>
+                      );
+                    }
+                    return (
+                      <pre
+                        key={`text-${index}`}
+                        className="text-textSecondary font-mono text-sm whitespace-pre-wrap break-words"
+                        style={{ color: '#a0aec0' }}
+                      >
+                        {item.value}
+                      </pre>
+                    );
+                  })}
+                  {!output && !richOutputs.length && (
+                    <p className="text-textSecondary text-sm" style={{ color: '#a0aec0' }}>
+                      Output will appear here after code execution...
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </motion.div>

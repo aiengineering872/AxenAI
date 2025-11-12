@@ -101,13 +101,40 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
+    // Courses collection
+    match /courses/{courseId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
     // Projects collection
     match /projects/{projectId} {
-      allow read: if resource.data.isPublic == true || 
-        (request.auth != null && request.auth.uid == resource.data.userId);
+      allow read: if request.auth != null;
       allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && 
+      // Allow owner/admin to update anything, or any user to update upvotes/upvotedUsers/comments count
+      allow update: if request.auth != null && (
+        // Owner or admin can update anything
+        (request.auth.uid == resource.data.userId || isAdmin()) ||
+        // Any authenticated user can update upvotes, upvotedUsers, comments, and updatedAt
+        (
+          request.resource.data.upvotes is int &&
+          request.resource.data.upvotedUsers is list &&
+          request.resource.data.comments is int &&
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.title == resource.data.title &&
+          request.resource.data.description == resource.data.description
+        )
+      );
+      allow delete: if request.auth != null &&
         (request.auth.uid == resource.data.userId || isAdmin());
+      
+      // Comments subcollection
+      match /comments/{commentId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update, delete: if request.auth != null &&
+          (request.auth.uid == resource.data.userId || isAdmin());
+      }
     }
     
     // Modules collection

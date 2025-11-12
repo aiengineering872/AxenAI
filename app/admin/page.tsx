@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Users, BookOpen, FlaskConical, MessageSquare, Plus, Edit, Trash2, TrendingUp } from 'lucide-react';
+import { Users, BookOpen, FlaskConical, MessageSquare, Plus, Edit, Trash2, TrendingUp, Clock } from 'lucide-react';
 import { adminService } from '@/lib/services/adminService';
 import ModuleModal from '@/components/admin/ModuleModal';
 import CourseModal from '@/components/admin/CourseModal';
@@ -21,6 +21,42 @@ const tabs: Array<{ id: AdminTab; label: string; icon: React.ElementType }> = [
   { id: 'users', label: 'Users', icon: Users },
   { id: 'faq', label: 'FAQ', icon: MessageSquare },
 ];
+
+const getDateKey = (date: Date) => date.toISOString().slice(0, 10);
+
+const formatDuration = (seconds: number) => {
+  if (!seconds || seconds <= 0) return '0m';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  const parts: string[] = [];
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (!hours && !minutes && secs) parts.push(`${secs}s`);
+  return parts.slice(0, 2).join(' ');
+};
+
+const computeActivity = (activityLog: Record<string, number> | undefined) => {
+  const today = new Date();
+  const todayKey = getDateKey(today);
+  const todaySeconds = activityLog?.[todayKey] ?? 0;
+
+  let last7DaysSeconds = 0;
+  for (let i = 0; i < 7; i++) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    const key = getDateKey(date);
+    const value = activityLog?.[key];
+    if (typeof value === 'number') {
+      last7DaysSeconds += value;
+    }
+  }
+
+  return {
+    todaySeconds,
+    last7DaysSeconds,
+  };
+};
 
 export default function AdminPanelPage() {
   const { isAdmin, loading: authLoading } = useAuth();
@@ -458,6 +494,28 @@ export default function AdminPanelPage() {
                         <span className="inline-flex items-center gap-2 rounded-full bg-card/80 px-3 py-1">
                           XP: <span className="font-medium text-text">{userItem.xp ?? 0}</span>
                         </span>
+                        {(() => {
+                          const { todaySeconds, last7DaysSeconds } = computeActivity(userItem.activityLog);
+                          const hasActivity = todaySeconds > 0 || last7DaysSeconds > 0;
+                          if (!hasActivity) {
+                            return (
+                              <span className="inline-flex items-center gap-2 rounded-full bg-card/80 px-3 py-1">
+                                <Clock className="h-4 w-4" />
+                                Activity: <span className="font-medium text-text">No data</span>
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <span className="inline-flex items-center gap-2 rounded-full bg-card/80 px-3 py-1">
+                              <Clock className="h-4 w-4" />
+                              Activity:{' '}
+                              <span className="font-medium text-text">
+                                {formatDuration(todaySeconds)} today • {formatDuration(last7DaysSeconds)} / 7d
+                              </span>
+                            </span>
+                          );
+                        })()}
                         {userItem.createdAt && (
                           <span className="inline-flex items-center gap-2 rounded-full bg-card/80 px-3 py-1">
                             Joined:{' '}

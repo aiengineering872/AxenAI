@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { motion } from 'framer-motion';
 import { BookOpen, Clock, TrendingUp, Play, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
+import { learningProgressService } from '@/lib/services/learningProgressService';
 
 interface Course {
   id: string;
@@ -24,111 +25,14 @@ interface Module {
   weeks: string;
 }
 
-const courses: Course[] = [
+const coursesData: Omit<Course, 'modules'>[] = [
   {
     id: 'ai-engineering',
     title: 'AI Engineering',
     description: 'Master the fundamentals and advanced concepts of AI Engineering',
     duration: '4 weeks',
     levels: ['beginner', 'intermediate', 'advanced'],
-    modules: [
-      {
-        id: 'ai-intro',
-        title: 'AI Foundations & Roadmap',
-        duration: '1 week',
-        difficulty: 'beginner',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'sql-data-engineering',
-        title: 'SQL & Data Engineering Essentials',
-        duration: '1 week',
-        difficulty: 'beginner',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'python',
-        title: 'Python for AI Engineering',
-        duration: '1 week',
-        difficulty: 'beginner',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'machine-learning',
-        title: 'Machine Learning Systems',
-        duration: '1 week',
-        difficulty: 'intermediate',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'deep-learning',
-        title: 'Deep Learning Fundamentals',
-        duration: '1 week',
-        difficulty: 'advanced',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'generative-ai',
-        title: 'Generative AI & Creative Models',
-        duration: '1 week',
-        difficulty: 'advanced',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'llm-integration',
-        title: 'Working with LLMs (Python Integration)',
-        duration: '1 week',
-        difficulty: 'advanced',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'transformer-architecture',
-        title: 'Transformer Architecture Mastery',
-        duration: '1 week',
-        difficulty: 'advanced',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'hugging-face',
-        title: 'Hugging Face & Pre-trained Models',
-        duration: '1 week',
-        difficulty: 'advanced',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'frameworks',
-        title: 'AI Frameworks in Production',
-        duration: '1 week',
-        difficulty: 'intermediate',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'ai-applications',
-        title: 'Designing AI Applications',
-        duration: '1 week',
-        difficulty: 'intermediate',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'ai-agents',
-        title: 'Building AI Agents & Orchestration',
-        duration: '1 week',
-        difficulty: 'advanced',
-        progress: 0,
-        weeks: '1 week',
-      },
-    ],
+    modules: [],
   },
   {
     id: 'aiml-engineering',
@@ -136,42 +40,144 @@ const courses: Course[] = [
     description: 'Comprehensive AI and Machine Learning engineering course',
     duration: '4 weeks',
     levels: ['beginner', 'intermediate', 'advanced'],
-    modules: [
-      {
-        id: 'python',
-        title: 'Python Fundamentals',
-        duration: '1 week',
-        difficulty: 'beginner',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'machine-learning',
-        title: 'Machine Learning',
-        duration: '1 week',
-        difficulty: 'intermediate',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'deep-learning',
-        title: 'Deep Learning',
-        duration: '1 week',
-        difficulty: 'advanced',
-        progress: 0,
-        weeks: '1 week',
-      },
-      {
-        id: 'mlops',
-        title: 'MLOps & Deployment',
-        duration: '2 weeks',
-        difficulty: 'advanced',
-        progress: 0,
-        weeks: '2 weeks',
-      },
-    ],
+    modules: [],
   },
 ];
+
+const moduleDefinitions: Record<string, Module[]> = {
+  'ai-engineering': [
+    {
+      id: 'ai-intro',
+      title: 'AI Foundations & Roadmap',
+      duration: '1 week',
+      difficulty: 'beginner',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'sql-data-engineering',
+      title: 'SQL & Data Engineering Essentials',
+      duration: '1 week',
+      difficulty: 'beginner',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'python',
+      title: 'Python for AI Engineering',
+      duration: '1 week',
+      difficulty: 'beginner',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'machine-learning',
+      title: 'Machine Learning Systems',
+      duration: '1 week',
+      difficulty: 'intermediate',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'deep-learning',
+      title: 'Deep Learning Fundamentals',
+      duration: '1 week',
+      difficulty: 'advanced',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'generative-ai',
+      title: 'Generative AI & Creative Models',
+      duration: '1 week',
+      difficulty: 'advanced',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'llm-integration',
+      title: 'Working with LLMs (Python Integration)',
+      duration: '1 week',
+      difficulty: 'advanced',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'transformer-architecture',
+      title: 'Transformer Architecture Mastery',
+      duration: '1 week',
+      difficulty: 'advanced',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'hugging-face',
+      title: 'Hugging Face & Pre-trained Models',
+      duration: '1 week',
+      difficulty: 'advanced',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'frameworks',
+      title: 'AI Frameworks in Production',
+      duration: '1 week',
+      difficulty: 'intermediate',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'ai-applications',
+      title: 'Designing AI Applications',
+      duration: '1 week',
+      difficulty: 'intermediate',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'ai-agents',
+      title: 'Building AI Agents & Orchestration',
+      duration: '1 week',
+      difficulty: 'advanced',
+      progress: 0,
+      weeks: '1 week',
+    },
+  ],
+  'aiml-engineering': [
+    {
+      id: 'python',
+      title: 'Python Fundamentals',
+      duration: '1 week',
+      difficulty: 'beginner',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'machine-learning',
+      title: 'Machine Learning',
+      duration: '1 week',
+      difficulty: 'intermediate',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'deep-learning',
+      title: 'Deep Learning',
+      duration: '1 week',
+      difficulty: 'advanced',
+      progress: 0,
+      weeks: '1 week',
+    },
+    {
+      id: 'mlops',
+      title: 'MLOps & Deployment',
+      duration: '2 weeks',
+      difficulty: 'advanced',
+      progress: 0,
+      weeks: '2 weeks',
+    },
+  ],
+};
 
 const getDifficultyColor = (difficulty: string) => {
   switch (difficulty) {
@@ -188,6 +194,47 @@ const getDifficultyColor = (difficulty: string) => {
 
 export default function LearningHubPage() {
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+
+  // Load courses with real progress
+  useEffect(() => {
+    const coursesWithProgress = coursesData.map((course) => {
+      const modules = moduleDefinitions[course.id] || [];
+      const modulesWithProgress = modules.map((module) => {
+        const moduleProgress = learningProgressService.getModuleProgress(course.id, module.id);
+        return {
+          ...module,
+          progress: moduleProgress.progress,
+        };
+      });
+      return {
+        ...course,
+        modules: modulesWithProgress,
+      };
+    });
+    setCourses(coursesWithProgress);
+  }, []);
+
+  // Reload progress when course selection changes
+  useEffect(() => {
+    if (selectedCourse) {
+      const coursesWithProgress = coursesData.map((course) => {
+        const modules = moduleDefinitions[course.id] || [];
+        const modulesWithProgress = modules.map((module) => {
+          const moduleProgress = learningProgressService.getModuleProgress(course.id, module.id);
+          return {
+            ...module,
+            progress: moduleProgress.progress,
+          };
+        });
+        return {
+          ...course,
+          modules: modulesWithProgress,
+        };
+      });
+      setCourses(coursesWithProgress);
+    }
+  }, [selectedCourse]);
 
   const selectedCourseData = courses.find((c) => c.id === selectedCourse);
 

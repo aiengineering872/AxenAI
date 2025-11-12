@@ -72,7 +72,7 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onS
         description: form.description,
         tags: parsedTags,
         githubLink: form.githubLink || null,
-        isPublic: form.isPublic,
+        isPublic: true,
         userName: form.ownerName || 'Admin',
         ownerEmail: form.ownerEmail || null,
         userId: form.ownerUid || `admin_${Date.now()}`,
@@ -186,16 +186,6 @@ export const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onS
               />
             </div>
           </div>
-
-          <label className="flex items-center gap-2 text-sm text-textSecondary">
-            <input
-              type="checkbox"
-              checked={form.isPublic}
-              onChange={(event) => handleChange('isPublic', event.target.checked)}
-              className="h-4 w-4"
-            />
-            Make project public
-          </label>
 
           <div className="mt-6 flex gap-4">
             <button type="button" onClick={onClose} className="flex-1 rounded-lg bg-card px-4 py-3 hover:bg-card/80">
