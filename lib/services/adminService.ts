@@ -203,7 +203,7 @@ export const adminService = {
       .map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
-      }))
+      } as { id: string; createdAt?: any; [key: string]: any }))
       .sort((a, b) => {
         const aDate =
           typeof a.createdAt?.toDate === 'function'

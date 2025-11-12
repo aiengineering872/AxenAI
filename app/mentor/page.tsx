@@ -243,7 +243,7 @@ export default function MentorPage() {
     const conversationHistory = previousMessages
       .slice(-10) // Last 10 messages for context
       .map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'model',
+        role: (msg.role === 'user' ? 'user' : 'model') as 'user' | 'model',
         parts: [{ text: msg.content }]
       }));
 

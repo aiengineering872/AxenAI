@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Sparkles, Mail, Lock, User, UserPlus } from 'lucide-react';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
+import { demoAuth } from '@/lib/utils/demoAuth';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 
@@ -16,14 +17,18 @@ export default function SignUpPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const firebaseReady = isFirebaseConfigured();
 
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
       setError('');
-      
-      if (!isFirebaseConfigured()) {
-        throw new Error('Firebase is not configured. Please check your environment variables.');
+
+      if (!firebaseReady) {
+        await demoAuth.signInWithGoogle();
+        await refreshUser();
+        router.push('/dashboard');
+        return;
       }
 
       const { signInWithGoogle } = await import('@/lib/firebase/auth');
@@ -42,9 +47,12 @@ export default function SignUpPage() {
     try {
       setLoading(true);
       setError('');
-      
-      if (!isFirebaseConfigured()) {
-        throw new Error('Firebase is not configured. Please check your environment variables.');
+
+      if (!firebaseReady) {
+        await demoAuth.signUp(email, password, name);
+        await refreshUser();
+        router.push('/dashboard');
+        return;
       }
 
       const { signUpWithEmail } = await import('@/lib/firebase/auth');
@@ -74,6 +82,11 @@ export default function SignUpPage() {
               </h1>
             </div>
             <p className="text-textSecondary">Create your account to start learning</p>
+            {!firebaseReady && (
+              <div className="mt-3 inline-block px-3 py-1 bg-amber-500/20 border border-amber-500/50 rounded-lg text-amber-400 text-xs">
+                Demo mode active (Firebase disabled)
+              </div>
+            )}
           </div>
 
           {error && (

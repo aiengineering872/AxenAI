@@ -33,8 +33,24 @@ const courses: Course[] = [
     levels: ['beginner', 'intermediate', 'advanced'],
     modules: [
       {
+        id: 'ai-intro',
+        title: 'AI Foundations & Roadmap',
+        duration: '1 week',
+        difficulty: 'beginner',
+        progress: 0,
+        weeks: '1 week',
+      },
+      {
+        id: 'sql-data-engineering',
+        title: 'SQL & Data Engineering Essentials',
+        duration: '1 week',
+        difficulty: 'beginner',
+        progress: 0,
+        weeks: '1 week',
+      },
+      {
         id: 'python',
-        title: 'Python Fundamentals',
+        title: 'Python for AI Engineering',
         duration: '1 week',
         difficulty: 'beginner',
         progress: 0,
@@ -42,7 +58,7 @@ const courses: Course[] = [
       },
       {
         id: 'machine-learning',
-        title: 'Machine Learning',
+        title: 'Machine Learning Systems',
         duration: '1 week',
         difficulty: 'intermediate',
         progress: 0,
@@ -50,7 +66,7 @@ const courses: Course[] = [
       },
       {
         id: 'deep-learning',
-        title: 'Deep Learning',
+        title: 'Deep Learning Fundamentals',
         duration: '1 week',
         difficulty: 'advanced',
         progress: 0,
@@ -58,7 +74,55 @@ const courses: Course[] = [
       },
       {
         id: 'generative-ai',
-        title: 'Generative AI',
+        title: 'Generative AI & Creative Models',
+        duration: '1 week',
+        difficulty: 'advanced',
+        progress: 0,
+        weeks: '1 week',
+      },
+      {
+        id: 'llm-integration',
+        title: 'Working with LLMs (Python Integration)',
+        duration: '1 week',
+        difficulty: 'advanced',
+        progress: 0,
+        weeks: '1 week',
+      },
+      {
+        id: 'transformer-architecture',
+        title: 'Transformer Architecture Mastery',
+        duration: '1 week',
+        difficulty: 'advanced',
+        progress: 0,
+        weeks: '1 week',
+      },
+      {
+        id: 'hugging-face',
+        title: 'Hugging Face & Pre-trained Models',
+        duration: '1 week',
+        difficulty: 'advanced',
+        progress: 0,
+        weeks: '1 week',
+      },
+      {
+        id: 'frameworks',
+        title: 'AI Frameworks in Production',
+        duration: '1 week',
+        difficulty: 'intermediate',
+        progress: 0,
+        weeks: '1 week',
+      },
+      {
+        id: 'ai-applications',
+        title: 'Designing AI Applications',
+        duration: '1 week',
+        difficulty: 'intermediate',
+        progress: 0,
+        weeks: '1 week',
+      },
+      {
+        id: 'ai-agents',
+        title: 'Building AI Agents & Orchestration',
         duration: '1 week',
         difficulty: 'advanced',
         progress: 0,
@@ -147,32 +211,38 @@ export default function LearningHubPage() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 whileHover={{ scale: 1.03, y: -8 }}
-                className="glass modern-card glow-border p-6 rounded-xl cursor-pointer"
+                className="group glass modern-card glow-border p-6 rounded-xl cursor-pointer transition-all hover:shadow-[0_0_30px_rgba(255,107,53,0.35)] hover:border-[#ff6b35]/75"
                 onClick={() => setSelectedCourse(course.id)}
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-primary/20 rounded-lg flex items-center justify-center">
-                      <BookOpen className="w-6 h-6 text-primary" />
+                    <div className="w-12 h-12 rounded-lg border border-white/10 bg-white/5 transition-all duration-300 group-hover:border-[#ff6b35]/60 group-hover:bg-[#ff6b35]/15 flex items-center justify-center">
+                      <BookOpen className="w-6 h-6 text-[#ff6b35]" />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-bold text-text">{course.title}</h2>
-                      <p className="text-sm text-textSecondary">{course.duration}</p>
+                      <h2 className="text-2xl font-bold text-text transition-colors duration-300 group-hover:text-[#ffe3d0]">
+                        {course.title}
+                      </h2>
+                      <p className="text-sm text-textSecondary transition-colors duration-300 group-hover:text-white/80">
+                        {course.duration}
+                      </p>
                     </div>
                   </div>
                 </div>
-                <p className="text-textSecondary mb-4">{course.description}</p>
+                <p className="text-textSecondary mb-4 transition-colors duration-300 group-hover:text-white/80">
+                  {course.description}
+                </p>
                 <div className="flex flex-wrap gap-2 mb-4">
                   {course.levels.map((level) => (
                     <span
                       key={level}
-                      className="px-2 py-1 rounded text-xs bg-card text-textSecondary capitalize"
+                      className="px-2 py-1 rounded text-xs bg-card text-textSecondary capitalize transition-all duration-300 group-hover:border group-hover:border-[#ff6b35]/60 group-hover:bg-[#ff6b35]/15 group-hover:text-[#ffe3d0]"
                     >
                       {level}
                     </span>
                   ))}
                 </div>
-                <div className="flex items-center gap-2 text-primary font-medium">
+                <div className="flex items-center gap-2 text-primary font-medium transition-colors duration-300 group-hover:text-[#ff6b35]">
                   <Play className="w-4 h-4" />
                   <span>Start Learning</span>
                 </div>
@@ -207,14 +277,16 @@ export default function LearningHubPage() {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.1 }}
                   whileHover={{ scale: 1.02, y: -4 }}
-                  className="glass modern-card glow-border p-6 rounded-xl transition-all"
+                  className="group glass modern-card glow-border p-6 rounded-xl transition-all hover:shadow-[0_0_30px_rgba(255,107,53,0.3)] hover:border-[#ff6b35]/70"
                 >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
-                      <h3 className="text-xl font-bold text-text mb-2">{module.title}</h3>
+                      <h3 className="text-xl font-bold text-text mb-2 transition-colors duration-300 group-hover:text-[#ffe3d0]">
+                        {module.title}
+                      </h3>
                       <div className="flex items-center gap-4 mb-3">
-                        <div className="flex items-center gap-2 text-textSecondary">
-                          <Clock className="w-4 h-4" />
+                        <div className="flex items-center gap-2 text-textSecondary transition-colors duration-300 group-hover:text-white/80">
+                          <Clock className="w-4 h-4 text-[#ff6b35]" />
                           <span className="text-sm">{module.weeks}</span>
                         </div>
                         <span
@@ -243,7 +315,7 @@ export default function LearningHubPage() {
                   </div>
 
                   <Link href={`/learning/${selectedCourse}/${module.id}`}>
-                    <button className="w-full py-3 bg-primary hover:bg-primary/90 text-white font-medium rounded-lg transition-all flex items-center justify-center gap-2">
+                    <button className="w-full py-3 bg-gradient-to-r from-[#ff8c42] via-[#ff6b35] to-[#ff4500] text-white font-medium rounded-lg transition-all flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(255,107,53,0.35)] hover:shadow-[0_0_28px_rgba(255,69,0,0.45)]">
                       {module.progress > 0 ? (
                         <>
                           <CheckCircle className="w-5 h-5" />
