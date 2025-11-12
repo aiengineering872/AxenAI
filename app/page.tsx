@@ -842,7 +842,7 @@ export default function Home() {
     setMenuOpen(false);
     // Use window.location for static export compatibility
     if (typeof window !== 'undefined') {
-      window.location.href = '/auth/login.html';
+      window.location.href = '/auth/login';
     }
   }, []);
 
@@ -850,7 +850,7 @@ export default function Home() {
     setMenuOpen(false);
     // Use window.location for static export compatibility
     if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard.html';
+      window.location.href = '/dashboard';
     }
   }, []);
 

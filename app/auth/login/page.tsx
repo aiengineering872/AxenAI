@@ -41,7 +41,7 @@ export default function LoginPage() {
           // Wait a bit more to ensure state is propagated
           await new Promise(resolve => setTimeout(resolve, 200));
           if (typeof window !== 'undefined') {
-            window.location.href = '/dashboard.html';
+            window.location.href = '/dashboard';
           }
         } catch (signInError: any) {
           throw signInError;
@@ -55,7 +55,7 @@ export default function LoginPage() {
       // Wait to ensure auth state is set
       await new Promise(resolve => setTimeout(resolve, 300));
       if (typeof window !== 'undefined') {
-        window.location.href = '/dashboard.html';
+        window.location.href = '/dashboard';
       }
     } catch (err: any) {
       setError(err.message || 'Failed to sign in with Google');
@@ -86,7 +86,7 @@ export default function LoginPage() {
           // Wait a bit more to ensure state is propagated
           await new Promise(resolve => setTimeout(resolve, 200));
           if (typeof window !== 'undefined') {
-            window.location.href = '/dashboard.html';
+            window.location.href = '/dashboard';
           }
         } catch (signInError: any) {
           throw signInError;
@@ -100,7 +100,7 @@ export default function LoginPage() {
       // Wait to ensure auth state is set
       await new Promise(resolve => setTimeout(resolve, 300));
       if (typeof window !== 'undefined') {
-        window.location.href = '/dashboard.html';
+        window.location.href = '/dashboard';
       }
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');

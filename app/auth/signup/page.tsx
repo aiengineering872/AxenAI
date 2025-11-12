@@ -30,7 +30,7 @@ export default function SignUpPage() {
         await refreshUser();
         await new Promise(resolve => setTimeout(resolve, 200));
         if (typeof window !== 'undefined' && user) {
-          window.location.href = '/dashboard.html';
+          window.location.href = '/dashboard';
         }
         return;
       }
@@ -40,7 +40,7 @@ export default function SignUpPage() {
       await refreshUser();
       await new Promise(resolve => setTimeout(resolve, 300));
       if (typeof window !== 'undefined') {
-        window.location.href = '/dashboard.html';
+        window.location.href = '/dashboard';
       }
     } catch (err: any) {
       setError(err.message || 'Failed to sign up with Google');
@@ -61,7 +61,7 @@ export default function SignUpPage() {
         await refreshUser();
         await new Promise(resolve => setTimeout(resolve, 200));
         if (typeof window !== 'undefined' && user) {
-          window.location.href = '/dashboard.html';
+          window.location.href = '/dashboard';
         }
         return;
       }
@@ -71,7 +71,7 @@ export default function SignUpPage() {
       await refreshUser();
       await new Promise(resolve => setTimeout(resolve, 300));
       if (typeof window !== 'undefined') {
-        window.location.href = '/dashboard.html';
+        window.location.href = '/dashboard';
       }
     } catch (err: any) {
       setError(err.message || 'Failed to sign up');

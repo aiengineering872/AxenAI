@@ -93,7 +93,7 @@ export const Sidebar: React.FC = () => {
                 whileTap={{ scale: 0.95 }}
                 onClick={() => {
                   if (typeof window !== 'undefined') {
-                    window.location.href = `${item.path}.html`;
+                    window.location.href = item.path;
                   }
                 }}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer ${
@@ -114,7 +114,7 @@ export const Sidebar: React.FC = () => {
               whileTap={{ scale: 0.95 }}
               onClick={() => {
                 if (typeof window !== 'undefined') {
-                  window.location.href = '/admin.html';
+                  window.location.href = '/admin';
                 }
               }}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer ${
