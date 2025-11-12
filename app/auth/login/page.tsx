@@ -25,10 +25,26 @@ export default function LoginPage() {
       setError('');
 
       if (!firebaseReady) {
-        await demoAuth.signInWithGoogle();
-        await refreshUser();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/dashboard.html';
+        try {
+          const user = await demoAuth.signInWithGoogle();
+          if (!user) {
+            throw new Error('Google sign in failed - no user returned');
+          }
+          // Wait a bit to ensure localStorage is set
+          await new Promise(resolve => setTimeout(resolve, 150));
+          await refreshUser();
+          // Double-check user is in localStorage before redirecting
+          const verifyUser = demoAuth.getCurrentUser();
+          if (!verifyUser) {
+            throw new Error('User session not saved properly');
+          }
+          // Wait a bit more to ensure state is propagated
+          await new Promise(resolve => setTimeout(resolve, 200));
+          if (typeof window !== 'undefined') {
+            window.location.href = '/dashboard.html';
+          }
+        } catch (signInError: any) {
+          throw signInError;
         }
         return;
       }
@@ -36,12 +52,13 @@ export default function LoginPage() {
       const { signInWithGoogle } = await import('@/lib/firebase/auth');
       await signInWithGoogle();
       await refreshUser();
+      // Wait to ensure auth state is set
+      await new Promise(resolve => setTimeout(resolve, 300));
       if (typeof window !== 'undefined') {
         window.location.href = '/dashboard.html';
       }
     } catch (err: any) {
       setError(err.message || 'Failed to sign in with Google');
-    } finally {
       setLoading(false);
     }
   };
@@ -53,10 +70,26 @@ export default function LoginPage() {
       setError('');
 
       if (!firebaseReady) {
-        await demoAuth.signIn(email, password);
-        await refreshUser();
-        if (typeof window !== 'undefined') {
-          window.location.href = '/dashboard.html';
+        try {
+          const user = await demoAuth.signIn(email, password);
+          if (!user) {
+            throw new Error('Sign in failed - no user returned');
+          }
+          // Wait a bit to ensure localStorage is set
+          await new Promise(resolve => setTimeout(resolve, 150));
+          await refreshUser();
+          // Double-check user is in localStorage before redirecting
+          const verifyUser = demoAuth.getCurrentUser();
+          if (!verifyUser) {
+            throw new Error('User session not saved properly');
+          }
+          // Wait a bit more to ensure state is propagated
+          await new Promise(resolve => setTimeout(resolve, 200));
+          if (typeof window !== 'undefined') {
+            window.location.href = '/dashboard.html';
+          }
+        } catch (signInError: any) {
+          throw signInError;
         }
         return;
       }
@@ -64,12 +97,13 @@ export default function LoginPage() {
       const { signInWithEmail } = await import('@/lib/firebase/auth');
       await signInWithEmail(email, password);
       await refreshUser();
+      // Wait to ensure auth state is set
+      await new Promise(resolve => setTimeout(resolve, 300));
       if (typeof window !== 'undefined') {
         window.location.href = '/dashboard.html';
       }
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
-    } finally {
       setLoading(false);
     }
   };

@@ -25,9 +25,11 @@ export default function SignUpPage() {
       setError('');
 
       if (!firebaseReady) {
-        await demoAuth.signInWithGoogle();
+        const user = await demoAuth.signInWithGoogle();
+        await new Promise(resolve => setTimeout(resolve, 100));
         await refreshUser();
-        if (typeof window !== 'undefined') {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        if (typeof window !== 'undefined' && user) {
           window.location.href = '/dashboard.html';
         }
         return;
@@ -36,6 +38,7 @@ export default function SignUpPage() {
       const { signInWithGoogle } = await import('@/lib/firebase/auth');
       await signInWithGoogle();
       await refreshUser();
+      await new Promise(resolve => setTimeout(resolve, 300));
       if (typeof window !== 'undefined') {
         window.location.href = '/dashboard.html';
       }
@@ -53,9 +56,11 @@ export default function SignUpPage() {
       setError('');
 
       if (!firebaseReady) {
-        await demoAuth.signUp(email, password, name);
+        const user = await demoAuth.signUp(email, password, name);
+        await new Promise(resolve => setTimeout(resolve, 100));
         await refreshUser();
-        if (typeof window !== 'undefined') {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        if (typeof window !== 'undefined' && user) {
           window.location.href = '/dashboard.html';
         }
         return;
@@ -64,6 +69,7 @@ export default function SignUpPage() {
       const { signUpWithEmail } = await import('@/lib/firebase/auth');
       await signUpWithEmail(email, password, name);
       await refreshUser();
+      await new Promise(resolve => setTimeout(resolve, 300));
       if (typeof window !== 'undefined') {
         window.location.href = '/dashboard.html';
       }

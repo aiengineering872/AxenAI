@@ -175,6 +175,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       if (!isFirebaseConfigured()) {
         hydrateDemoUser();
+        // Wait a bit to ensure state is set
+        await new Promise(resolve => setTimeout(resolve, 50));
+        setLoading(false);
         return;
       }
 
@@ -188,7 +191,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setLoading(false);
     }
-  }, [hydrateUserState]);
+  }, [hydrateDemoUser, hydrateUserState]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
