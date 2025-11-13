@@ -28,9 +28,14 @@ export const MobileNav: React.FC = () => {
   return (
     <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-card/80 backdrop-blur-sm border-b border-card">
       <div className="flex items-center justify-between p-4">
-        <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-          AXEN
-        </span>
+        <img
+          src="/axen-logo.png"
+          alt="Axen AI Academy logo"
+          className="h-10 w-auto"
+          width={180}
+          height={40}
+          loading="lazy"
+        />
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="p-2 hover:bg-card rounded-lg transition-all"

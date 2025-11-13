@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { BrainCircuit, Rocket, Sparkles, Menu, X, GraduationCap, Bot, Workflow } from 'lucide-react';
-import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 
 const navLinks = [
@@ -47,23 +46,17 @@ const Navigation: React.FC<{
     <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 lg:px-8">
       <button
         onClick={() => onNavClick('hero')}
-        className="flex items-center gap-3 text-left focus:outline-none"
+        className="flex items-center focus:outline-none"
         aria-label="Axen AI home"
       >
-        <Image
+        <img
           src="/axen-logo.png"
           alt="Axen AI Academy logo"
-          width={48}
-          height={48}
-          className="h-12 w-auto rounded-xl bg-transparent shadow-lg shadow-[0_0_24px_rgba(255,107,53,0.25)]"
-          priority
+          className="h-14 w-auto rounded-xl bg-transparent shadow-lg shadow-[0_0_24px_rgba(255,107,53,0.25)]"
+          width={200}
+          height={56}
+          loading="lazy"
         />
-        <div className="flex flex-col leading-tight">
-          <span className="bg-gradient-to-r from-orange-400 via-amber-500 to-orange-600 bg-clip-text text-base font-bold text-transparent">
-            Axen AI
-          </span>
-          <span className="text-xs uppercase tracking-[0.35em] text-white/70">Academy</span>
-        </div>
       </button>
 
       <div className="hidden items-center gap-10 lg:flex">
@@ -215,22 +208,26 @@ const AnimatedBackground: React.FC = () => (
 const HeroSection: React.FC<{ onEnroll: () => void }> = ({ onEnroll }) => (
   <section
     id="hero"
-    className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0A0A0F] pt-28 text-white"
+    className="relative flex min-h-screen items-start justify-center overflow-hidden bg-[#0A0A0F] pt-24 text-white"
   >
     <AnimatedBackground />
 
-    <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-10 px-6 text-center lg:flex-row lg:items-start lg:justify-between lg:text-left">
+    <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col items-center gap-10 px-6 pt-20 text-center lg:flex-row lg:items-start lg:justify-between lg:text-left">
       <motion.div
         className="max-w-2xl space-y-8"
         initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, amount: 0.4 }}
+        animate="visible"
         variants={{
-          hidden: { opacity: 0, y: 60 },
+          hidden: { opacity: 0, y: 40 },
           visible: {
             opacity: 1,
             y: 0,
-            transition: { duration: 0.8, ease: 'easeOut' },
+            transition: {
+              duration: 0.6,
+              ease: 'easeOut',
+              delayChildren: 0.05,
+              staggerChildren: 0.08,
+            },
           },
         }}
       >
@@ -245,7 +242,6 @@ const HeroSection: React.FC<{ onEnroll: () => void }> = ({ onEnroll }) => (
         <motion.h1
           className="text-5xl font-bold leading-tight sm:text-6xl lg:text-7xl"
           variants={fadeInUp}
-          custom={0.2}
         >
           Learn AI Skills
           <br />
@@ -257,13 +253,12 @@ const HeroSection: React.FC<{ onEnroll: () => void }> = ({ onEnroll }) => (
         <motion.p
           className="text-lg leading-relaxed text-white/70 sm:text-xl"
           variants={fadeInUp}
-          custom={0.3}
         >
           Master AI Engineering & ML with comprehensive courses covering Machine Learning,
           Deep Learning, GenAI, and MLOps — guided by your personal AI Tutor.
         </motion.p>
 
-        <motion.div variants={fadeInUp} custom={0.4}>
+        <motion.div variants={fadeInUp}>
           <button
             onClick={onEnroll}
             className="group inline-flex items-center gap-3 rounded-full bg-gradient-to-r from-[#ff8c42] via-[#ff6b35] to-[#ff4500] px-8 py-3 text-lg font-semibold text-[#120602] shadow-[0_0_32px_rgba(255,107,53,0.45)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_42px_rgba(255,69,0,0.55)] focus:outline-none"
@@ -280,7 +275,7 @@ const HeroSection: React.FC<{ onEnroll: () => void }> = ({ onEnroll }) => (
         className="relative w-full max-w-lg"
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.8, delay: 0.2, ease: 'easeOut' }}
+        transition={{ duration: 0.7, delay: 0.05, ease: 'easeOut' }}
       >
         <div className="relative overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-white/5 via-white/2 to-transparent p-6 shadow-2xl shadow-[0_0_45px_rgba(255,107,53,0.18)] before:absolute before:-inset-[2px] before:-z-10 before:bg-gradient-to-r before:from-[#ff6b35]/20 before:via-[#ff4500]/15 before:to-[#ff8c42]/20 before:blur-3xl before:content-['']">
           <div className="grid gap-6">

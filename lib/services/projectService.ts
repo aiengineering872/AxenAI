@@ -79,10 +79,21 @@ export const projectService = {
   // Comment functions
   async addComment(projectId: string, commentData: { userId: string; userName: string; userPhoto?: string; text: string }) {
     await ensureFirebase();
-    const commentRef = await addDoc(collection(db, 'projects', projectId, 'comments'), {
-      ...commentData,
+    
+    // Filter out undefined values - Firestore doesn't accept undefined
+    const commentPayload: Record<string, any> = {
+      userId: commentData.userId,
+      userName: commentData.userName,
+      text: commentData.text,
       createdAt: serverTimestamp(),
-    });
+    };
+    
+    // Only include userPhoto if it has a value
+    if (commentData.userPhoto) {
+      commentPayload.userPhoto = commentData.userPhoto;
+    }
+    
+    const commentRef = await addDoc(collection(db, 'projects', projectId, 'comments'), commentPayload);
     
     // Update comment count
     await updateDoc(doc(db, 'projects', projectId), {

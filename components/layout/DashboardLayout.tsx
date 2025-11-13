@@ -1,6 +1,6 @@
 'use client';
 
-import React, { ReactNode, useMemo } from 'react';
+import React, { ReactNode, useEffect, useMemo } from 'react';
 import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileNav';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,7 +25,25 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
   const router = useRouter();
   const pathname = usePathname();
 
+  useEffect(() => {
+    if (!loading && !user && !firebaseUser) {
+      router.replace('/auth/login');
+    }
+  }, [loading, user, firebaseUser, router]);
+
   const pageTitle = useMemo(() => formatPathname(pathname || ''), [pathname]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-text">
+        Loading dashboard...
+      </div>
+    );
+  }
+
+  if (!user && !firebaseUser) {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen">
