@@ -4,9 +4,6 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Mail, Lock, LogIn } from 'lucide-react';
-import Image from 'next/image';
-import { isFirebaseConfigured } from '@/lib/firebase/config';
-import { demoAuth } from '@/lib/utils/demoAuth';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 
@@ -17,19 +14,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const firebaseReady = isFirebaseConfigured();
 
   const handleGoogleSignIn = async () => {
     try {
       setLoading(true);
       setError('');
-
-      if (!firebaseReady) {
-        await demoAuth.signInWithGoogle();
-        await refreshUser();
-        router.push('/dashboard');
-        return;
-      }
 
       const { signInWithGoogle } = await import('@/lib/firebase/auth');
       await signInWithGoogle();
@@ -47,13 +36,6 @@ export default function LoginPage() {
     try {
       setLoading(true);
       setError('');
-
-      if (!firebaseReady) {
-        await demoAuth.signIn(email, password);
-        await refreshUser();
-        router.push('/dashboard');
-        return;
-      }
 
       const { signInWithEmail } = await import('@/lib/firebase/auth');
       await signInWithEmail(email, password);
@@ -76,24 +58,16 @@ export default function LoginPage() {
         <div className="glass rounded-2xl p-8 shadow-glow">
           <div className="text-center mb-8">
             <div className="flex flex-col items-center justify-center gap-3 mb-4">
-              <Image
+              <img
                 src="/axen-logo.png"
                 alt="Axen AI Academy logo"
-                width={72}
-                height={72}
-                className="h-16 w-auto"
-                priority
+                className="h-24 w-auto mx-auto"
+                width={240}
+                height={96}
+                loading="lazy"
               />
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent uppercase tracking-[0.2em]">
-                Axen AI Academy
-              </h1>
             </div>
             <p className="text-textSecondary mb-2">Sign in to continue learning</p>
-            {!firebaseReady && (
-              <div className="inline-block px-3 py-1 bg-amber-500/20 border border-amber-500/50 rounded-lg text-amber-400 text-xs">
-                Demo mode active (Firebase disabled)
-              </div>
-            )}
           </div>
 
           {error && (

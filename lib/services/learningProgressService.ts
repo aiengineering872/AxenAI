@@ -24,28 +24,12 @@ const DEMO_PROGRESS_KEY = 'axen_demo_progress';
 const getUserId = (): string | null => {
   if (typeof window === 'undefined') return null;
   
-  if (isFirebaseConfigured()) {
-    // In Firebase mode, try to get current user
-    try {
-      const currentUser = auth?.currentUser;
-      return currentUser?.uid || null;
-    } catch {
-      return null;
-    }
-  }
-  
-  // In demo mode, get from localStorage session
   try {
-    const session = localStorage.getItem('axen_demo_session');
-    if (session) {
-      const user = JSON.parse(session);
-      return user?.uid || null;
-    }
+    const currentUser = auth?.currentUser;
+    return currentUser?.uid || null;
   } catch {
-    // Ignore errors
+    return null;
   }
-  
-  return null;
 };
 
 // Get storage key for current user

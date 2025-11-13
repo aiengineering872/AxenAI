@@ -1,28 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'export', // Enable static export for Firebase Hosting
   images: {
+    unoptimized: true, // Required for static export
     domains: ['localhost'],
   },
   // Fix workspace root warning
   outputFileTracingRoot: require('path').join(__dirname),
-  // Disable cache headers in development to prevent 404s
-  async headers() {
-    if (process.env.NODE_ENV === 'production') {
-      return [
-        {
-          source: '/:path*',
-          headers: [
-            {
-              key: 'Cache-Control',
-              value: 'public, max-age=3600, must-revalidate',
-            },
-          ],
-        },
-      ];
-    }
-    return [];
-  },
+  // Note: headers() is not supported in static export mode
 };
 
 module.exports = nextConfig;

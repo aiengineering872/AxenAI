@@ -10,7 +10,6 @@ import React, {
 } from 'react';
 import { User } from '@/types';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
-import { demoAuth, DemoUser } from '@/lib/utils/demoAuth';
 
 interface AuthContextType {
   user: User | null;
@@ -32,25 +31,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [firebaseUser, setFirebaseUser] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const hydrateDemoUser = useCallback(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const storedUser = demoAuth.getCurrentUser();
-    if (storedUser) {
-      const { password: _password, ...safeUser } = storedUser as DemoUser;
-      setUser(safeUser);
-    } else {
-      setUser(null);
-    }
-    setFirebaseUser(null);
-  }, []);
-
   const hydrateUserState = useCallback(
     async (currentUser: any | null) => {
       if (!isFirebaseConfigured()) {
-        hydrateDemoUser();
+        setUser(null);
+        setFirebaseUser(null);
         return;
       }
 
@@ -174,7 +159,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setLoading(true);
     try {
       if (!isFirebaseConfigured()) {
-        hydrateDemoUser();
+        setUser(null);
+        setFirebaseUser(null);
+        setLoading(false);
         return;
       }
 
@@ -195,16 +182,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const subscribeToAuthChanges = async () => {
       if (!isFirebaseConfigured()) {
-        hydrateDemoUser();
-        if (typeof window !== 'undefined') {
-          const handleStorageChange = () => {
-            hydrateDemoUser();
-          };
-          window.addEventListener('storage', handleStorageChange);
-          unsubscribe = () => {
-            window.removeEventListener('storage', handleStorageChange);
-          };
-        }
+        setUser(null);
+        setFirebaseUser(null);
         setLoading(false);
         return;
       }
@@ -244,7 +223,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         unsubscribe();
       }
     };
-  }, [hydrateDemoUser, hydrateUserState]);
+  }, [hydrateUserState]);
 
   const isAdmin = user?.role === 'admin';
 

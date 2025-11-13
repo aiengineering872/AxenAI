@@ -389,7 +389,7 @@ Rules:
     if (contactSegments.length > 0) {
       const contactInfo = contactSegments.join(' | ');
       const contactLines = doc.splitTextToSize(contactInfo, 180);
-      contactLines.forEach((line) => {
+      contactLines.forEach((line: string) => {
         doc.text(line, centerX, yPos, { align: 'center' });
         yPos += 6;
       });

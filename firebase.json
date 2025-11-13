@@ -1,0 +1,76 @@
+{
+  "hosting": {
+    "public": "out",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/auth/login",
+        "destination": "/auth/login.html"
+      },
+      {
+        "source": "/auth/signup",
+        "destination": "/auth/signup.html"
+      },
+      {
+        "source": "/dashboard",
+        "destination": "/dashboard.html"
+      },
+      {
+        "source": "/dashboard/:moduleId",
+        "destination": "/dashboard/:moduleId.html"
+      },
+      {
+        "source": "/learning",
+        "destination": "/learning.html"
+      },
+      {
+        "source": "/learning/:courseId/:moduleId",
+        "destination": "/learning/:courseId/:moduleId.html"
+      },
+      {
+        "source": "/simulator",
+        "destination": "/simulator.html"
+      },
+      {
+        "source": "/projects",
+        "destination": "/projects.html"
+      },
+      {
+        "source": "/mentor",
+        "destination": "/mentor.html"
+      },
+      {
+        "source": "/leaderboard",
+        "destination": "/leaderboard.html"
+      },
+      {
+        "source": "/certificates",
+        "destination": "/certificates.html"
+      },
+      {
+        "source": "/practice-tests",
+        "destination": "/practice-tests.html"
+      },
+      {
+        "source": "/resume-builder",
+        "destination": "/resume-builder.html"
+      },
+      {
+        "source": "/api-integration",
+        "destination": "/api-integration.html"
+      },
+      {
+        "source": "/admin",
+        "destination": "/admin.html"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

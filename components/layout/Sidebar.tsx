@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -20,7 +19,6 @@ import {
   Key,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { isFirebaseConfigured } from '@/lib/firebase/config';
 import { useTheme } from '@/contexts/ThemeContext';
 
 const menuItems = [
@@ -45,16 +43,12 @@ export const Sidebar: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      if (!isFirebaseConfigured()) {
-        throw new Error('Firebase is not configured.');
-      }
-
       const { logout } = await import('@/lib/firebase/auth');
       await logout();
-      window.location.href = '/auth/login';
     } catch (error) {
       console.error('Logout error:', error);
-      window.location.href = '/auth/login';
+    } finally {
+      window.location.href = '/';
     }
   };
 
@@ -71,10 +65,14 @@ export const Sidebar: React.FC = () => {
     >
       <div className="p-6">
         <div className="flex items-center gap-2 mb-8">
-          <Sparkles className="w-8 h-8 text-primary" />
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            AXEN
-          </h1>
+          <img
+            src="/axen-logo.png"
+            alt="Axen AI Academy logo"
+            className="h-12 w-auto"
+            width={200}
+            height={48}
+            loading="lazy"
+          />
         </div>
 
         <nav className="space-y-2">
@@ -88,38 +86,45 @@ export const Sidebar: React.FC = () => {
             }
             
             return (
-              <Link key={item.path} href={item.path}>
-                <motion.div
-                  whileHover={{ x: 4 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                    isActive
-                      ? 'bg-primary/20 text-primary shadow-glow'
-                      : 'text-textSecondary hover:text-text hover:bg-card/50'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                </motion.div>
-              </Link>
-            );
-          })}
-
-          {isAdmin && (
-            <Link href="/admin">
               <motion.div
+                key={item.path}
                 whileHover={{ x: 4 }}
                 whileTap={{ scale: 0.95 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                  pathname.startsWith('/admin')
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.location.href = item.path;
+                  }
+                }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer ${
+                  isActive
                     ? 'bg-primary/20 text-primary shadow-glow'
                     : 'text-textSecondary hover:text-text hover:bg-card/50'
                 }`}
               >
-                <Settings className="w-5 h-5" />
-                <span className="font-medium">Admin Panel</span>
+                <Icon className="w-5 h-5" />
+                <span className="font-medium">{item.label}</span>
               </motion.div>
-            </Link>
+            );
+          })}
+
+          {isAdmin && (
+            <motion.div
+              whileHover={{ x: 4 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.location.href = '/admin';
+                }
+              }}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer ${
+                pathname.startsWith('/admin')
+                  ? 'bg-primary/20 text-primary shadow-glow'
+                  : 'text-textSecondary hover:text-text hover:bg-card/50'
+              }`}
+            >
+              <Settings className="w-5 h-5" />
+              <span className="font-medium">Admin Panel</span>
+            </motion.div>
           )}
         </nav>
 

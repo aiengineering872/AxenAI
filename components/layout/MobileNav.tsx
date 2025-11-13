@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, Home, BookOpen, Code, FlaskConical, MessageSquare, Trophy, Award, FileText, UserRound, Key } from 'lucide-react';
@@ -28,9 +27,14 @@ export const MobileNav: React.FC = () => {
   return (
     <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-card/80 backdrop-blur-sm border-b border-card">
       <div className="flex items-center justify-between p-4">
-        <span className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-          AXEN
-        </span>
+        <img
+          src="/axen-logo.png"
+          alt="Axen AI Academy logo"
+          className="h-10 w-auto"
+          width={180}
+          height={40}
+          loading="lazy"
+        />
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="p-2 hover:bg-card rounded-lg transition-all"
@@ -59,18 +63,23 @@ export const MobileNav: React.FC = () => {
                 }
                 
                 return (
-                  <Link key={item.path} href={item.path} onClick={() => setIsOpen(false)}>
-                    <div
-                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                        isActive
-                          ? 'bg-primary/20 text-primary'
-                          : 'text-textSecondary hover:text-text hover:bg-card/50'
-                      }`}
-                    >
-                      <Icon className="w-5 h-5" />
-                      <span className="font-medium">{item.label}</span>
-                    </div>
-                  </Link>
+                  <div
+                    key={item.path}
+                    onClick={() => {
+                      setIsOpen(false);
+                      if (typeof window !== 'undefined') {
+                        window.location.href = item.path;
+                      }
+                    }}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-primary/20 text-primary'
+                        : 'text-textSecondary hover:text-text hover:bg-card/50'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span className="font-medium">{item.label}</span>
+                  </div>
                 );
               })}
             </nav>
