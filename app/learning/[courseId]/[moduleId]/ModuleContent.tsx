@@ -35,7 +35,7 @@ export default function ModuleContent() {
         
         // Fetch module information to get the title
         const allModules = await adminService.getModules();
-        const module = allModules.find((m: any) => m.id === moduleId);
+        const module = allModules.find((m: any) => m.id === moduleId) as any;
         
         console.log('Looking for module with ID:', moduleId);
         console.log('All modules:', allModules);
@@ -48,7 +48,7 @@ export default function ModuleContent() {
           // Try to get module by courseId if not found by id
           const moduleByCourse = allModules.find((m: any) => 
             m.courseId === courseId && (m.id === moduleId || m.title?.toLowerCase().includes(moduleId.toLowerCase()))
-          );
+          ) as any;
           if (moduleByCourse && moduleByCourse.title) {
             setModuleTitle(moduleByCourse.title);
             console.log('Set module title from course match:', moduleByCourse.title);
