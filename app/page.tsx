@@ -835,13 +835,19 @@ export default function Home() {
 
   const handleEnroll = useCallback(() => {
     setMenuOpen(false);
-    router.push('/auth/login');
-  }, [router]);
+    // Use window.location for static export compatibility
+    if (typeof window !== 'undefined') {
+      window.location.href = '/auth/login';
+    }
+  }, []);
 
   const handleDashboard = useCallback(() => {
     setMenuOpen(false);
-    router.push('/dashboard');
-  }, [router]);
+    // Use window.location for static export compatibility
+    if (typeof window !== 'undefined') {
+      window.location.href = '/dashboard';
+    }
+  }, []);
 
   const sections = useMemo(
     () => (

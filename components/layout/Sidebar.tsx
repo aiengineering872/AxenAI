@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -87,38 +86,45 @@ export const Sidebar: React.FC = () => {
             }
             
             return (
-              <Link key={item.path} href={item.path}>
-                <motion.div
-                  whileHover={{ x: 4 }}
-                  whileTap={{ scale: 0.95 }}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                    isActive
-                      ? 'bg-primary/20 text-primary shadow-glow'
-                      : 'text-textSecondary hover:text-text hover:bg-card/50'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                </motion.div>
-              </Link>
-            );
-          })}
-
-          {isAdmin && (
-            <Link href="/admin">
               <motion.div
+                key={item.path}
                 whileHover={{ x: 4 }}
                 whileTap={{ scale: 0.95 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
-                  pathname.startsWith('/admin')
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.location.href = item.path;
+                  }
+                }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer ${
+                  isActive
                     ? 'bg-primary/20 text-primary shadow-glow'
                     : 'text-textSecondary hover:text-text hover:bg-card/50'
                 }`}
               >
-                <Settings className="w-5 h-5" />
-                <span className="font-medium">Admin Panel</span>
+                <Icon className="w-5 h-5" />
+                <span className="font-medium">{item.label}</span>
               </motion.div>
-            </Link>
+            );
+          })}
+
+          {isAdmin && (
+            <motion.div
+              whileHover={{ x: 4 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                if (typeof window !== 'undefined') {
+                  window.location.href = '/admin';
+                }
+              }}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all cursor-pointer ${
+                pathname.startsWith('/admin')
+                  ? 'bg-primary/20 text-primary shadow-glow'
+                  : 'text-textSecondary hover:text-text hover:bg-card/50'
+              }`}
+            >
+              <Settings className="w-5 h-5" />
+              <span className="font-medium">Admin Panel</span>
+            </motion.div>
           )}
         </nav>
 
