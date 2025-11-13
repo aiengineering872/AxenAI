@@ -1,5 +1,6 @@
 import ModuleContent from './ModuleContent';
 
+
 // Generate static params for static export
 export function generateStaticParams() {
   const courses = ['ai-engineering', 'aiml-engineering'];
