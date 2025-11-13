@@ -106,16 +106,19 @@ export const adminService = {
     await ensureFirebase();
     let qRef;
     if (moduleId) {
+      // Only filter by moduleId, sort in JavaScript to avoid index requirement
       qRef = query(
         collection(db, 'lessons'),
-        where('moduleId', '==', moduleId),
-        orderBy('order', 'asc')
+        where('moduleId', '==', moduleId)
       );
     } else {
-      qRef = query(collection(db, 'lessons'), orderBy('order', 'asc'));
+      qRef = query(collection(db, 'lessons'));
     }
     const snapshot = await getDocs(qRef);
-    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    const lessons = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    
+    // Sort by order in JavaScript
+    return lessons.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
   },
 
   async createLesson(lessonData: Record<string, any>) {

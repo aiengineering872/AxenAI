@@ -5,11 +5,12 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Users, BookOpen, FlaskConical, MessageSquare, Plus, Edit, Trash2, TrendingUp, Clock } from 'lucide-react';
+import { Users, BookOpen, FlaskConical, MessageSquare, Plus, Edit, Trash2, TrendingUp, Clock, X } from 'lucide-react';
 import { adminService } from '@/lib/services/adminService';
 import ModuleModal from '@/components/admin/ModuleModal';
 import CourseModal from '@/components/admin/CourseModal';
 import ProjectModal from '@/components/admin/ProjectModal';
+import LessonModal from '@/components/admin/LessonModal';
 
 type AdminTab = 'dashboard' | 'courses' | 'modules' | 'projects' | 'users' | 'faq';
 
@@ -79,8 +80,77 @@ export default function AdminPanelPage() {
   const [editingCourse, setEditingCourse] = useState<any>(null);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState<any>(null);
+  const [showLessonModal, setShowLessonModal] = useState(false);
+  const [editingLesson, setEditingLesson] = useState<any>(null);
+  const [selectedModuleForLessons, setSelectedModuleForLessons] = useState<string | null>(null);
+  const [lessons, setLessons] = useState<any[]>([]);
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
+  const [showLessonDropdown, setShowLessonDropdown] = useState<string | null>(null);
 
   const hasCourses = courses.length > 0;
+  
+  // Sync courses from learning hub to Firebase
+  const syncCoursesFromLearningHub = async () => {
+    try {
+      const existingCourses = await adminService.getCourses();
+      const existingCourseIds = existingCourses.map((c: any) => c.id);
+      
+      // Define courses from learning hub
+      const learningHubCourses = [
+        {
+          id: 'ai-engineering',
+          title: 'AI Engineering',
+          description: 'Master the fundamentals and advanced concepts of AI Engineering',
+          duration: '4 weeks',
+          levels: ['beginner', 'intermediate', 'advanced'],
+        },
+        {
+          id: 'aiml-engineering',
+          title: 'AI/ML Engineering',
+          description: 'Comprehensive AI and Machine Learning engineering course',
+          duration: '4 weeks',
+          levels: ['beginner', 'intermediate', 'advanced'],
+        },
+      ];
+      
+      // Add courses that don't exist in Firebase
+      for (const course of learningHubCourses) {
+        if (!existingCourseIds.includes(course.id)) {
+          await adminService.createCourse(course);
+          console.log(`Created course: ${course.title}`);
+        }
+      }
+      
+      // Reload courses after syncing
+      if (activeTab === 'courses' || activeTab === 'modules') {
+        const updatedCourses = await adminService.getCourses();
+        setCourses(updatedCourses);
+      }
+    } catch (error) {
+      console.error('Error syncing courses:', error);
+    }
+  };
+  
+  // Debug: Log courses and hasCourses state
+  useEffect(() => {
+    if (activeTab === 'modules') {
+      console.log('Courses:', courses);
+      console.log('Has courses:', hasCourses);
+    }
+  }, [activeTab, courses, hasCourses]);
+  
+  // Sync courses when admin panel loads (only once)
+  useEffect(() => {
+    if (isAdmin && !authLoading) {
+      syncCoursesFromLearningHub().then(() => {
+        // Reload data after syncing
+        if (activeTab === 'courses' || activeTab === 'modules') {
+          void loadData();
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, authLoading]);
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -94,6 +164,23 @@ export default function AdminPanelPage() {
     }
   }, [isAdmin, activeTab]);
 
+  // Close lesson dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showLessonDropdown && !target.closest('.lesson-dropdown-container')) {
+        setShowLessonDropdown(null);
+      }
+    };
+
+    if (showLessonDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showLessonDropdown]);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -105,15 +192,25 @@ export default function AdminPanelPage() {
       if (activeTab === 'courses') {
         const coursesData = await adminService.getCourses();
         setCourses(coursesData);
+        
+        // Sync courses from learning hub if they don't exist
+        await syncCoursesFromLearningHub();
       }
 
       if (activeTab === 'modules') {
+        // Sync courses first
+        await syncCoursesFromLearningHub();
+        
         const [modulesData, coursesData] = await Promise.all([
           adminService.getModules(),
           adminService.getCourses(),
         ]);
         setModules(modulesData);
         setCourses(coursesData);
+        
+        // Load lessons for all modules
+        const allLessons = await adminService.getLessons();
+        setLessons(allLessons);
       }
 
       if (activeTab === 'projects') {
@@ -141,6 +238,34 @@ export default function AdminPanelPage() {
       console.error('Error deleting module:', error);
       alert('Failed to delete module. Please try again.');
     }
+  };
+
+  const handleDeleteLesson = async (lessonId: string) => {
+    if (!confirm('Delete this lesson? This action cannot be undone.')) return;
+
+    try {
+      await adminService.deleteLesson(lessonId);
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting lesson:', error);
+      alert('Failed to delete lesson. Please try again.');
+    }
+  };
+
+  const toggleModuleExpansion = async (moduleId: string) => {
+    const newExpanded = new Set(expandedModules);
+    if (newExpanded.has(moduleId)) {
+      newExpanded.delete(moduleId);
+    } else {
+      newExpanded.add(moduleId);
+      // Load lessons for this module
+      const moduleLessons = await adminService.getLessons(moduleId);
+      setLessons((prev) => {
+        const filtered = prev.filter((l) => l.moduleId !== moduleId);
+        return [...filtered, ...moduleLessons];
+      });
+    }
+    setExpandedModules(newExpanded);
   };
 
   const handleDeleteProject = async (projectId: string) => {
@@ -312,12 +437,24 @@ export default function AdminPanelPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-text">Learning Modules</h2>
               <button
-                onClick={() => {
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('Add Module button clicked, hasCourses:', hasCourses);
+                  if (!hasCourses) {
+                    alert('Please create a course first before adding modules. Go to the "Courses" tab to create one.');
+                    return;
+                  }
+                  console.log('Opening module modal');
                   setEditingModule(null);
                   setShowModuleModal(true);
                 }}
-                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={!hasCourses}
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-white transition hover:bg-primary/90 relative z-10 cursor-pointer"
+                style={{ 
+                  pointerEvents: 'auto',
+                  opacity: hasCourses ? 1 : 0.5,
+                }}
               >
                 <Plus className="h-5 w-5" />
                 Add Module
@@ -337,28 +474,169 @@ export default function AdminPanelPage() {
                 <div className="space-y-4">
                   {modules.map((module) => {
                     const course = courses.find((courseItem) => courseItem.id === module.courseId);
+                    const moduleLessons = lessons.filter((l) => l.moduleId === module.id).sort((a, b) => (a.order || 0) - (b.order || 0));
+                    const isExpanded = expandedModules.has(module.id);
+                    
                     return (
-                      <div key={module.id} className="flex items-center justify-between rounded-lg bg-card/50 p-4 transition hover:bg-card">
-                        <div>
-                          <h3 className="font-medium text-text">{module.title}</h3>
-                          <p className="text-sm text-textSecondary">
-                            {course?.title ?? 'Unassigned'} • {module.difficulty} • {module.duration}
-                          </p>
+                      <div key={module.id} className="rounded-lg bg-card/50 transition hover:bg-card">
+                        <div className="flex items-center justify-between p-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => toggleModuleExpansion(module.id)}
+                                className="text-textSecondary hover:text-text transition"
+                              >
+                                {isExpanded ? '▼' : '▶'}
+                              </button>
+                              <div>
+                                <h3 className="font-medium text-text">{module.title}</h3>
+                                <p className="text-sm text-textSecondary">
+                                  {course?.title ?? 'Unassigned'} • {module.difficulty} • {module.duration} • {moduleLessons.length} lessons
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 relative lesson-dropdown-container">
+                            <button
+                              onClick={async () => {
+                                // Load lessons for this module if not already loaded
+                                if (moduleLessons.length === 0) {
+                                  const moduleLessonsData = await adminService.getLessons(module.id);
+                                  setLessons((prev) => {
+                                    const filtered = prev.filter((l) => l.moduleId !== module.id);
+                                    return [...filtered, ...moduleLessonsData];
+                                  });
+                                }
+                                // Toggle dropdown
+                                setShowLessonDropdown(showLessonDropdown === module.id ? null : module.id);
+                              }}
+                              className="flex items-center gap-1 rounded px-3 py-1.5 text-sm bg-primary/20 text-primary hover:bg-primary/30 transition relative z-10"
+                              title="Add/Edit Lessons"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Add Lesson
+                            </button>
+                            
+                            {showLessonDropdown === module.id && (
+                              <div className="absolute right-0 top-full mt-2 w-80 glass rounded-lg border border-card/50 p-4 z-50 shadow-xl">
+                                <div className="mb-3 flex items-center justify-between">
+                                  <h4 className="font-semibold text-text">Lessons for {module.title}</h4>
+                                  <button
+                                    onClick={() => setShowLessonDropdown(null)}
+                                    className="text-textSecondary hover:text-text"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </button>
+                                </div>
+                                
+                                <div className="max-h-64 space-y-2 overflow-y-auto">
+                                  {moduleLessons.length === 0 ? (
+                                    <p className="text-sm text-textSecondary text-center py-4">No lessons yet.</p>
+                                  ) : (
+                                    moduleLessons.map((lesson) => (
+                                      <div
+                                        key={lesson.id}
+                                        className="flex items-center justify-between rounded bg-card/30 p-2 hover:bg-card/50 transition"
+                                      >
+                                        <div className="flex-1 min-w-0">
+                                          <h5 className="text-sm font-medium text-text truncate">{lesson.title}</h5>
+                                          <p className="text-xs text-textSecondary">Order: {lesson.order || 0}</p>
+                                        </div>
+                                        <div className="flex items-center gap-1 ml-2">
+                                          <button
+                                            onClick={() => {
+                                              setSelectedModuleForLessons(module.id);
+                                              setEditingLesson(lesson);
+                                              setShowLessonModal(true);
+                                              setShowLessonDropdown(null);
+                                            }}
+                                            className="rounded p-1.5 transition hover:bg-card"
+                                            title="Edit Lesson"
+                                          >
+                                            <Edit className="h-3.5 w-3.5 text-textSecondary" />
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              if (confirm('Delete this lesson?')) {
+                                                handleDeleteLesson(lesson.id);
+                                              }
+                                            }}
+                                            className="rounded p-1.5 transition hover:bg-card"
+                                            title="Delete Lesson"
+                                          >
+                                            <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                                
+                                <div className="mt-3 border-t border-card/50 pt-3">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedModuleForLessons(module.id);
+                                      setEditingLesson(null);
+                                      setShowLessonModal(true);
+                                      setShowLessonDropdown(null);
+                                    }}
+                                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-white transition hover:bg-primary/90"
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                    Add New Lesson
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            <button
+                              onClick={() => {
+                                setEditingModule(module);
+                                setShowModuleModal(true);
+                              }}
+                              className="rounded p-2 transition hover:bg-card"
+                            >
+                              <Edit className="h-5 w-5 text-textSecondary" />
+                            </button>
+                            <button onClick={() => handleDeleteModule(module.id)} className="rounded p-2 transition hover:bg-card">
+                              <Trash2 className="h-5 w-5 text-red-400" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              setEditingModule(module);
-                              setShowModuleModal(true);
-                            }}
-                            className="rounded p-2 transition hover:bg-card"
-                          >
-                            <Edit className="h-5 w-5 text-textSecondary" />
-                          </button>
-                          <button onClick={() => handleDeleteModule(module.id)} className="rounded p-2 transition hover:bg-card">
-                            <Trash2 className="h-5 w-5 text-red-400" />
-                          </button>
-                        </div>
+                        
+                        {isExpanded && (
+                          <div className="border-t border-card/50 p-4 space-y-2">
+                            {moduleLessons.length === 0 ? (
+                              <p className="text-sm text-textSecondary text-center py-4">No lessons yet. Click "Add Lesson" to create one.</p>
+                            ) : (
+                              moduleLessons.map((lesson) => (
+                                <div key={lesson.id} className="flex items-center justify-between rounded bg-card/30 p-3">
+                                  <div>
+                                    <h4 className="text-sm font-medium text-text">{lesson.title}</h4>
+                                    <p className="text-xs text-textSecondary">Order: {lesson.order || 0}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedModuleForLessons(module.id);
+                                        setEditingLesson(lesson);
+                                        setShowLessonModal(true);
+                                      }}
+                                      className="rounded p-1.5 transition hover:bg-card"
+                                    >
+                                      <Edit className="h-4 w-4 text-textSecondary" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteLesson(lesson.id)}
+                                      className="rounded p-1.5 transition hover:bg-card"
+                                    >
+                                      <Trash2 className="h-4 w-4 text-red-400" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -546,15 +824,41 @@ export default function AdminPanelPage() {
           </motion.div>
         )}
 
+        <CourseModal
+          isOpen={showCourseModal}
+          onClose={() => {
+            setShowCourseModal(false);
+            setEditingCourse(null);
+          }}
+          onSuccess={() => void loadData()}
+          course={editingCourse}
+        />
+
         <ModuleModal
           isOpen={showModuleModal}
           onClose={() => {
+            console.log('Closing module modal');
             setShowModuleModal(false);
             setEditingModule(null);
           }}
-          onSuccess={() => void loadData()}
+          onSuccess={() => {
+            console.log('Module saved successfully');
+            void loadData();
+          }}
           module={editingModule}
           courses={courses}
+        />
+
+        <LessonModal
+          isOpen={showLessonModal}
+          onClose={() => {
+            setShowLessonModal(false);
+            setEditingLesson(null);
+            setSelectedModuleForLessons(null);
+          }}
+          onSuccess={() => void loadData()}
+          lesson={editingLesson}
+          moduleId={selectedModuleForLessons || ''}
         />
 
         <ProjectModal
