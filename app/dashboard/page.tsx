@@ -1,11 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion } from 'framer-motion';
-import { Sparkles, ArrowRight, Brain, Cpu } from 'lucide-react';
+import { Sparkles, ArrowRight, Brain, Cpu, BookOpen } from 'lucide-react';
 import Link from 'next/link';
+import { adminService } from '@/lib/services/adminService';
 
 interface LearningModule {
   id: string;
@@ -16,27 +17,64 @@ interface LearningModule {
   gradient: string;
 }
 
-const learningModules: LearningModule[] = [
-  {
-    id: 'ai-engineering',
-    title: 'AI Engineering',
-    description: 'Master the fundamentals and advanced concepts of AI Engineering. Build real-world AI applications and systems.',
-    icon: Brain,
-    color: 'from-blue-500 to-cyan-500',
-    gradient: 'bg-gradient-to-br from-blue-500/20 to-cyan-500/20',
-  },
-  {
-    id: 'aiml',
-    title: 'AIML',
-    description: 'Comprehensive AI and Machine Learning engineering course. Learn ML algorithms, deep learning, and MLOps.',
-    icon: Cpu,
-    color: 'from-purple-500 to-pink-500',
-    gradient: 'bg-gradient-to-br from-purple-500/20 to-pink-500/20',
-  },
-];
+// Icon and color mapping for courses
+const getCourseIcon = (courseId: string): React.ComponentType<{ className?: string }> => {
+  if (courseId.includes('aiml') || courseId.includes('ml')) {
+    return Cpu;
+  }
+  if (courseId.includes('ai')) {
+    return Brain;
+  }
+  return BookOpen;
+};
+
+const getCourseColors = (index: number): { color: string; gradient: string } => {
+  const colors = [
+    { color: 'from-blue-500 to-cyan-500', gradient: 'bg-gradient-to-br from-blue-500/20 to-cyan-500/20' },
+    { color: 'from-purple-500 to-pink-500', gradient: 'bg-gradient-to-br from-purple-500/20 to-pink-500/20' },
+    { color: 'from-green-500 to-emerald-500', gradient: 'bg-gradient-to-br from-green-500/20 to-emerald-500/20' },
+    { color: 'from-orange-500 to-red-500', gradient: 'bg-gradient-to-br from-orange-500/20 to-red-500/20' },
+    { color: 'from-indigo-500 to-blue-500', gradient: 'bg-gradient-to-br from-indigo-500/20 to-blue-500/20' },
+  ];
+  return colors[index % colors.length];
+};
 
 export default function DashboardHomePage() {
   const { user, firebaseUser } = useAuth();
+  const [learningModules, setLearningModules] = useState<LearningModule[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadCourses = async () => {
+      try {
+        setLoading(true);
+        const courses = await adminService.getCourses();
+        
+        const modules: LearningModule[] = courses.map((course: any, index: number) => {
+          const Icon = getCourseIcon(course.id);
+          const { color, gradient } = getCourseColors(index);
+          
+          return {
+            id: course.id,
+            title: course.title || 'Untitled Course',
+            description: course.description || 'Comprehensive learning course',
+            icon: Icon,
+            color,
+            gradient,
+          };
+        });
+        
+        setLearningModules(modules);
+      } catch (error) {
+        console.error('Error loading courses:', error);
+        setLearningModules([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCourses();
+  }, []);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -75,8 +113,17 @@ export default function DashboardHomePage() {
         </motion.div>
 
         {/* Learning Modules Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-          {learningModules.map((module, index) => {
+        {loading ? (
+          <div className="text-center py-12">
+            <p className="text-textSecondary">Loading courses...</p>
+          </div>
+        ) : learningModules.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-textSecondary">No courses available.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
+            {learningModules.map((module, index) => {
             const Icon = module.icon;
             return (
               <Link key={module.id} href={`/dashboard/${module.id}`}>
@@ -111,7 +158,8 @@ export default function DashboardHomePage() {
               </Link>
             );
           })}
-        </div>
+          </div>
+        )}
 
         {/* Quick Stats */}
         <motion.div
@@ -134,7 +182,7 @@ export default function DashboardHomePage() {
               <p className="text-caption">Total XP</p>
             </div>
             <div className="text-center md:text-left">
-              <p className="text-2xl font-bold text-text">2</p>
+              <p className="text-2xl font-bold text-text">{learningModules.length}</p>
               <p className="text-caption">Learning Modules</p>
             </div>
           </div>

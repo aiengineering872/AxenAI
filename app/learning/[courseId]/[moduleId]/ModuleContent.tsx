@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import React, { useState, useEffect, useRef } from 'react';
+import { ModuleLayout } from '@/components/layout/ModuleLayout';
 import { motion } from 'framer-motion';
 import { CheckCircle, ArrowLeft, ArrowRight, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
 import { learningProgressService } from '@/lib/services/learningProgressService';
 import { adminService } from '@/lib/services/adminService';
 
@@ -16,85 +15,70 @@ interface Lesson {
   videoUrl?: string;
   googleColabUrl?: string;
   completed: boolean;
+  order?: number;
 }
 
-export default function ModuleContent() {
-  const params = useParams();
-  const courseId = params.courseId as string;
-  const moduleId = params.moduleId as string;
+interface ModuleContentProps {
+  courseId: string;
+  moduleId: string;
+}
+
+export default function ModuleContent({ courseId, moduleId }: ModuleContentProps) {
   const [currentLesson, setCurrentLesson] = useState(0);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [moduleTitle, setModuleTitle] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  // Load module info and lessons from Firebase
+  // Load module info and lessons from Firebase - only use Firebase data
   useEffect(() => {
     const loadModuleAndLessons = async () => {
+      if (!moduleId || !courseId) return;
+
       try {
         setLoading(true);
         
-        // Fetch module information to get the title
-        const allModules = await adminService.getModules();
-        const module = allModules.find((m: any) => m.id === moduleId) as any;
+        // Fetch module and lessons in parallel
+        const [module, firebaseLessons] = await Promise.all([
+          adminService.getModule(moduleId),
+          adminService.getLessons(moduleId),
+        ]);
         
-        console.log('Looking for module with ID:', moduleId);
-        console.log('All modules:', allModules);
-        console.log('Found module:', module);
-        
-        if (module && module.title) {
+        // Set module title - only if exists in Firebase
+        if (module?.title) {
           setModuleTitle(module.title);
-          console.log('Set module title to:', module.title);
         } else {
-          // Try to get module by courseId if not found by id
-          const moduleByCourse = allModules.find((m: any) => 
-            m.courseId === courseId && (m.id === moduleId || m.title?.toLowerCase().includes(moduleId.toLowerCase()))
-          ) as any;
-          if (moduleByCourse && moduleByCourse.title) {
-            setModuleTitle(moduleByCourse.title);
-            console.log('Set module title from course match:', moduleByCourse.title);
-          } else {
-            // Fallback: use moduleId if module not found
-            setModuleTitle(moduleId);
-            console.log('Using moduleId as fallback:', moduleId);
-          }
+          setModuleTitle('');
         }
         
-        // Fetch lessons for this module from Firebase
-        console.log('Fetching lessons for moduleId:', moduleId);
-        const firebaseLessons = await adminService.getLessons(moduleId);
-        console.log('Fetched lessons:', firebaseLessons);
-        
+        // Process lessons - only use Firebase data
         if (firebaseLessons.length > 0) {
-          // Lessons are already sorted by getLessons
-          // Load saved progress for each lesson
           const lessonsWithProgress = firebaseLessons.map((lesson: any) => ({
             id: lesson.id,
-            title: lesson.title,
+            title: lesson.title || '',
             content: lesson.content || '',
-            videoUrl: lesson.videoUrl,
-            googleColabUrl: lesson.googleColabUrl,
+            videoUrl: lesson.videoUrl || undefined,
+            googleColabUrl: lesson.googleColabUrl || undefined,
             completed: learningProgressService.isLessonCompleted(courseId, moduleId, lesson.id),
+            order: lesson.order || 0,
           }));
           
-          console.log('Lessons with progress:', lessonsWithProgress);
+          // Sort by order
+          lessonsWithProgress.sort((a, b) => (a.order || 0) - (b.order || 0));
           setLessons(lessonsWithProgress);
         } else {
-          // No lessons found, show empty state
-          console.log('No lessons found for moduleId:', moduleId);
           setLessons([]);
         }
       } catch (error) {
         console.error('Error loading module and lessons:', error);
         setLessons([]);
-        setModuleTitle(moduleId); // Fallback to moduleId
+        setModuleTitle('');
       } finally {
         setLoading(false);
       }
     };
 
-    if (moduleId && courseId) {
-      loadModuleAndLessons();
-    }
+    loadModuleAndLessons();
   }, [courseId, moduleId]);
 
   const handleLessonComplete = async () => {
@@ -115,15 +99,33 @@ export default function ModuleContent() {
     );
   };
 
+  const handleLessonClick = (index: number) => {
+    if (index >= 0 && index < lessons.length) {
+      setCurrentLesson(index);
+      // Smooth scroll to top of content
+      if (contentRef.current) {
+        contentRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  };
+
   const nextLesson = () => {
     if (currentLesson < lessons.length - 1) {
       setCurrentLesson(currentLesson + 1);
+      // Smooth scroll to top of content
+      if (contentRef.current) {
+        contentRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   };
 
   const prevLesson = () => {
     if (currentLesson > 0) {
       setCurrentLesson(currentLesson - 1);
+      // Smooth scroll to top of content
+      if (contentRef.current) {
+        contentRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   };
 
@@ -246,7 +248,13 @@ export default function ModuleContent() {
 
   if (loading) {
     return (
-      <DashboardLayout>
+      <ModuleLayout
+        courseId={courseId}
+        moduleId={moduleId}
+        currentLessonIndex={currentLesson}
+        onLessonClick={handleLessonClick}
+        moduleTitle={moduleTitle}
+      >
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <Link
@@ -261,13 +269,19 @@ export default function ModuleContent() {
             <p className="text-textSecondary">Loading module...</p>
           </div>
         </div>
-      </DashboardLayout>
+      </ModuleLayout>
     );
   }
 
   if (lessons.length === 0) {
     return (
-      <DashboardLayout>
+      <ModuleLayout
+        courseId={courseId}
+        moduleId={moduleId}
+        currentLessonIndex={currentLesson}
+        onLessonClick={handleLessonClick}
+        moduleTitle={moduleTitle}
+      >
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <Link
@@ -279,17 +293,23 @@ export default function ModuleContent() {
             </Link>
           </div>
           <div className="glass p-6 rounded-xl">
-            <h1 className="text-3xl font-bold text-text mb-4">{moduleTitle || 'Module'}</h1>
+            {moduleTitle && <h1 className="text-3xl font-bold text-text mb-4">{moduleTitle}</h1>}
             <p className="text-textSecondary text-center py-8">No lessons available for this module yet. Please add lessons via the admin panel.</p>
           </div>
         </div>
-      </DashboardLayout>
+      </ModuleLayout>
     );
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
+    <ModuleLayout
+      courseId={courseId}
+      moduleId={moduleId}
+      currentLessonIndex={currentLesson}
+      onLessonClick={handleLessonClick}
+      moduleTitle={moduleTitle}
+    >
+      <div className="space-y-6" ref={contentRef}>
         <div className="flex items-center justify-between">
           <Link
             href="/learning"
@@ -305,10 +325,12 @@ export default function ModuleContent() {
           animate={{ opacity: 1, y: 0 }}
           className="glass p-6 rounded-xl"
         >
-          <div className="mb-4">
-            <h1 className="text-3xl font-bold text-text mb-2">{moduleTitle || 'Module'}</h1>
-            <p className="text-textSecondary text-sm">Course: {courseId}</p>
-          </div>
+          {moduleTitle && (
+            <div className="mb-4">
+              <h1 className="text-3xl font-bold text-text mb-2">{moduleTitle}</h1>
+              <p className="text-textSecondary text-sm">Course: {courseId}</p>
+            </div>
+          )}
           
           <h2 className="text-2xl font-bold text-text mb-4 border-t border-card/50 pt-4">
             {lessons[currentLesson]?.title}
@@ -334,11 +356,15 @@ export default function ModuleContent() {
             </p>
           </div>
 
-          <div className="prose prose-invert max-w-none mb-6">
+          <div className="prose prose-invert max-w-3xl mb-6">
             {formatContent(lessons[currentLesson]?.content || '')}
           </div>
 
-          {renderVideoContent(lessons[currentLesson]?.videoUrl || '')}
+          <div className="flex justify-center">
+            <div className="w-full max-w-4xl">
+              {renderVideoContent(lessons[currentLesson]?.videoUrl || '')}
+            </div>
+          </div>
 
           {lessons[currentLesson]?.googleColabUrl && (
             <div className="mb-6">
@@ -404,6 +430,6 @@ export default function ModuleContent() {
           </button>
         </motion.div>
       </div>
-    </DashboardLayout>
+    </ModuleLayout>
   );
 }

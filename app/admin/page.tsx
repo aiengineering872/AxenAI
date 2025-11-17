@@ -1,16 +1,17 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Users, BookOpen, FlaskConical, MessageSquare, Plus, Edit, Trash2, TrendingUp, Clock, X } from 'lucide-react';
+import { Users, BookOpen, FlaskConical, MessageSquare, Plus, Edit, Trash2, TrendingUp, Clock, X, ChevronDown } from 'lucide-react';
 import { adminService } from '@/lib/services/adminService';
 import ModuleModal from '@/components/admin/ModuleModal';
 import CourseModal from '@/components/admin/CourseModal';
 import ProjectModal from '@/components/admin/ProjectModal';
 import LessonModal from '@/components/admin/LessonModal';
+import { Toast } from '@/components/ui/Toast';
 
 type AdminTab = 'dashboard' | 'courses' | 'modules' | 'projects' | 'users' | 'faq';
 
@@ -86,6 +87,8 @@ export default function AdminPanelPage() {
   const [lessons, setLessons] = useState<any[]>([]);
   const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
   const [showLessonDropdown, setShowLessonDropdown] = useState<string | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' | 'info' } | null>(null);
 
   const hasCourses = courses.length > 0;
   
@@ -95,15 +98,8 @@ export default function AdminPanelPage() {
       const existingCourses = await adminService.getCourses();
       const existingCourseIds = existingCourses.map((c: any) => c.id);
       
-      // Define courses from learning hub
+      // Define courses from learning hub (only courses that should be auto-synced)
       const learningHubCourses = [
-        {
-          id: 'ai-engineering',
-          title: 'AI Engineering',
-          description: 'Master the fundamentals and advanced concepts of AI Engineering',
-          duration: '4 weeks',
-          levels: ['beginner', 'intermediate', 'advanced'],
-        },
         {
           id: 'aiml-engineering',
           title: 'AI/ML Engineering',
@@ -113,9 +109,12 @@ export default function AdminPanelPage() {
         },
       ];
       
-      // Add courses that don't exist in Firebase
+      // List of course IDs that should NOT be auto-created (removed from hardcoded list)
+      const excludedCourseIds = ['ai-engineering'];
+      
+      // Add courses that don't exist in Firebase and are not excluded
       for (const course of learningHubCourses) {
-        if (!existingCourseIds.includes(course.id)) {
+        if (!existingCourseIds.includes(course.id) && !excludedCourseIds.includes(course.id)) {
           await adminService.createCourse(course);
           console.log(`Created course: ${course.title}`);
         }
@@ -132,56 +131,7 @@ export default function AdminPanelPage() {
   };
   
   // Debug: Log courses and hasCourses state
-  useEffect(() => {
-    if (activeTab === 'modules') {
-      console.log('Courses:', courses);
-      console.log('Has courses:', hasCourses);
-    }
-  }, [activeTab, courses, hasCourses]);
-  
-  // Sync courses when admin panel loads (only once)
-  useEffect(() => {
-    if (isAdmin && !authLoading) {
-      syncCoursesFromLearningHub().then(() => {
-        // Reload data after syncing
-        if (activeTab === 'courses' || activeTab === 'modules') {
-          void loadData();
-        }
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, authLoading]);
-
-  useEffect(() => {
-    if (!authLoading && !isAdmin) {
-      router.push('/dashboard');
-    }
-  }, [authLoading, isAdmin, router]);
-
-  useEffect(() => {
-    if (isAdmin) {
-      void loadData();
-    }
-  }, [isAdmin, activeTab]);
-
-  // Close lesson dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (showLessonDropdown && !target.closest('.lesson-dropdown-container')) {
-        setShowLessonDropdown(null);
-      }
-    };
-
-    if (showLessonDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
-  }, [showLessonDropdown]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       if (activeTab === 'dashboard') {
@@ -202,7 +152,7 @@ export default function AdminPanelPage() {
         await syncCoursesFromLearningHub();
         
         const [modulesData, coursesData] = await Promise.all([
-          adminService.getModules(),
+          adminService.getModules(selectedCourseId || undefined),
           adminService.getCourses(),
         ]);
         setModules(modulesData);
@@ -226,7 +176,56 @@ export default function AdminPanelPage() {
       console.error('Error loading admin data:', error);
     }
     setLoading(false);
-  };
+  }, [activeTab, selectedCourseId]);
+
+  useEffect(() => {
+    if (activeTab === 'modules') {
+      console.log('Courses:', courses);
+      console.log('Has courses:', hasCourses);
+    }
+  }, [activeTab, courses, hasCourses]);
+  
+  // Sync courses when admin panel loads (only once)
+  useEffect(() => {
+    if (isAdmin && !authLoading) {
+      syncCoursesFromLearningHub().then(() => {
+        // Reload data after syncing
+        if (activeTab === 'courses' || activeTab === 'modules') {
+          void loadData();
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks-exhaustive-deps
+  }, [isAdmin, authLoading, activeTab, loadData]);
+
+  useEffect(() => {
+    if (!authLoading && !isAdmin) {
+      router.push('/dashboard');
+    }
+  }, [authLoading, isAdmin, router]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      void loadData();
+    }
+  }, [isAdmin, loadData]);
+
+  // Close lesson dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showLessonDropdown && !target.closest('.lesson-dropdown-container')) {
+        setShowLessonDropdown(null);
+      }
+    };
+
+    if (showLessonDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showLessonDropdown]);
 
   const handleDeleteModule = async (moduleId: string) => {
     if (!confirm('Delete this module? This action cannot be undone.')) return;
@@ -434,32 +433,66 @@ export default function AdminPanelPage() {
 
         {activeTab === 'modules' && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <h2 className="text-xl font-bold text-text">Learning Modules</h2>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  console.log('Add Module button clicked, hasCourses:', hasCourses);
-                  if (!hasCourses) {
-                    alert('Please create a course first before adding modules. Go to the "Courses" tab to create one.');
-                    return;
-                  }
-                  console.log('Opening module modal');
-                  setEditingModule(null);
-                  setShowModuleModal(true);
-                }}
-                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-white transition hover:bg-primary/90 relative z-10 cursor-pointer"
-                style={{ 
-                  pointerEvents: 'auto',
-                  opacity: hasCourses ? 1 : 0.5,
-                }}
-              >
-                <Plus className="h-5 w-5" />
-                Add Module
-              </button>
+              
+              <div className="flex items-center gap-3">
+                {/* Course Selector */}
+                <div className="relative">
+                  <select
+                    value={selectedCourseId}
+                    onChange={(e) => {
+                      setSelectedCourseId(e.target.value);
+                      setExpandedModules(new Set()); // Reset expanded modules when course changes
+                    }}
+                    className="appearance-none rounded-lg border border-card bg-card px-4 py-2 pr-10 text-text focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">Select Course</option>
+                    {courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.title}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-textSecondary" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    if (!hasCourses) {
+                      setToast({ message: 'Please create a course first before adding modules. Go to the "Courses" tab to create one.', type: 'error' });
+                      return;
+                    }
+                    
+                    if (!selectedCourseId) {
+                      setToast({ message: 'Please select a course first', type: 'error' });
+                      return;
+                    }
+                    
+                    setEditingModule(null);
+                    setShowModuleModal(true);
+                  }}
+                  className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-white transition hover:bg-primary/90 relative z-10 cursor-pointer"
+                  style={{ 
+                    pointerEvents: 'auto',
+                    opacity: hasCourses && selectedCourseId ? 1 : 0.5,
+                  }}
+                >
+                  <Plus className="h-5 w-5" />
+                  Add Module
+                </button>
+              </div>
             </div>
+            
+            {selectedCourseId && (
+              <p className="text-sm text-textSecondary">
+                Showing modules for: <span className="font-medium text-text">{courses.find(c => c.id === selectedCourseId)?.title || 'Unknown'}</span>
+              </p>
+            )}
 
             {!loading && !hasCourses && (
               <p className="rounded-lg bg-card/60 p-4 text-sm text-textSecondary">
@@ -641,8 +674,12 @@ export default function AdminPanelPage() {
                     );
                   })}
 
-                  {modules.length === 0 && (
-                    <div className="py-8 text-center text-textSecondary">No modules yet. Create your first module.</div>
+                  {modules.length === 0 && selectedCourseId && (
+                    <div className="py-8 text-center text-textSecondary">No modules yet for this course. Click "Add Module" to create one.</div>
+                  )}
+                  
+                  {modules.length === 0 && !selectedCourseId && (
+                    <div className="py-8 text-center text-textSecondary">Please select a course to view its modules.</div>
                   )}
                 </div>
               </div>
@@ -837,16 +874,16 @@ export default function AdminPanelPage() {
         <ModuleModal
           isOpen={showModuleModal}
           onClose={() => {
-            console.log('Closing module modal');
             setShowModuleModal(false);
             setEditingModule(null);
           }}
           onSuccess={() => {
-            console.log('Module saved successfully');
             void loadData();
+            setToast({ message: editingModule ? 'Module updated successfully!' : 'Module created successfully!', type: 'success' });
           }}
           module={editingModule}
           courses={courses}
+          preselectedCourseId={selectedCourseId}
         />
 
         <LessonModal
@@ -856,9 +893,13 @@ export default function AdminPanelPage() {
             setEditingLesson(null);
             setSelectedModuleForLessons(null);
           }}
-          onSuccess={() => void loadData()}
+          onSuccess={() => {
+            void loadData();
+            setToast({ message: editingLesson ? 'Lesson updated successfully!' : 'Lesson created successfully!', type: 'success' });
+          }}
           lesson={editingLesson}
           moduleId={selectedModuleForLessons || ''}
+          courseId={selectedCourseId || modules.find(m => m.id === selectedModuleForLessons)?.courseId}
         />
 
         <ProjectModal
@@ -870,6 +911,16 @@ export default function AdminPanelPage() {
           onSuccess={handleProjectSaved}
           project={editingProject}
         />
+        
+        {/* Toast Notification */}
+        {toast && (
+          <Toast
+            message={toast.message}
+            type={toast.type}
+            isVisible={!!toast}
+            onClose={() => setToast(null)}
+          />
+        )}
       </div>
     </DashboardLayout>
   );

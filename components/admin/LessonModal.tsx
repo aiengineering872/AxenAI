@@ -26,6 +26,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({
   onSuccess,
   lesson,
   moduleId,
+  courseId,
 }) => {
   const [formData, setFormData] = useState(defaultForm);
   const [loading, setLoading] = useState(false);
@@ -61,11 +62,13 @@ export const LessonModal: React.FC<LessonModalProps> = ({
         await adminService.updateLesson(lesson.id, {
           ...formData,
           moduleId,
+          courseId: courseId || lesson.courseId,
         });
       } else {
         await adminService.createLesson({
           ...formData,
           moduleId,
+          courseId: courseId || '',
         });
       }
       onSuccess();

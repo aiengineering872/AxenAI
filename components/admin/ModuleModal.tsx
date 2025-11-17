@@ -10,6 +10,7 @@ interface ModuleModalProps {
   onSuccess: () => void;
   module?: any;
   courses: any[];
+  preselectedCourseId?: string;
 }
 
 const defaultForm = {
@@ -27,6 +28,7 @@ export const ModuleModal: React.FC<ModuleModalProps> = ({
   onSuccess,
   module,
   courses,
+  preselectedCourseId,
 }) => {
   const [formData, setFormData] = useState(defaultForm);
   const [loading, setLoading] = useState(false);
@@ -46,17 +48,17 @@ export const ModuleModal: React.FC<ModuleModalProps> = ({
         description: module.description ?? '',
         duration: module.duration ?? '',
         difficulty: module.difficulty ?? 'beginner',
-        courseId: module.courseId ?? courses[0]?.id ?? '',
+        courseId: module.courseId ?? preselectedCourseId ?? courses[0]?.id ?? '',
         order: module.order ?? 0,
       });
     } else {
       setFormData({
         ...defaultForm,
-        courseId: courses[0]?.id ?? '',
+        courseId: preselectedCourseId ?? courses[0]?.id ?? '',
         order: 0,
       });
     }
-  }, [isOpen, module, courses]);
+  }, [isOpen, module, courses, preselectedCourseId]);
 
   const handleChange = (
     field: keyof typeof formData,
@@ -127,7 +129,7 @@ export const ModuleModal: React.FC<ModuleModalProps> = ({
               value={formData.courseId}
               onChange={(event) => handleChange('courseId', event.target.value)}
             className="w-full rounded-lg border border-card bg-card px-4 py-3 text-text focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!hasCourses && !isEditMode}
+            disabled={(!hasCourses && !isEditMode) || (preselectedCourseId && !isEditMode)}
             >
               <option value="" disabled>
                 Select course

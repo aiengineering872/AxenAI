@@ -13,19 +13,30 @@ import {
 } from 'firebase/firestore';
 import { initializeFirebase, db } from '@/lib/firebase/config';
 
-const ensureFirebase = async () => {
-  await initializeFirebase();
-  if (!db) {
-    throw new Error('Firebase not initialized');
+const ensureFirebase = async (): Promise<boolean> => {
+  try {
+    await initializeFirebase();
+    return !!db;
+  } catch (error) {
+    console.error('Firebase initialization error:', error);
+    return false;
   }
 };
 
 export const adminService = {
   // ===== Courses =====
   async getCourses() {
-    await ensureFirebase();
-    const snapshot = await getDocs(query(collection(db, 'courses'), orderBy('createdAt', 'desc')));
-    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    try {
+      const isInitialized = await ensureFirebase();
+      if (!isInitialized || !db) {
+        return [];
+      }
+      const snapshot = await getDocs(query(collection(db, 'courses'), orderBy('createdAt', 'desc')));
+      return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+      return []; // Return empty array on error
+    }
   },
 
   async getCourse(courseId: string) {
@@ -61,20 +72,48 @@ export const adminService = {
   },
 
   // ===== Modules =====
-  async getModules(courseId?: string) {
-    await ensureFirebase();
-    let qRef;
-    if (courseId) {
-      qRef = query(
-        collection(db, 'modules'),
-        where('courseId', '==', courseId),
-        orderBy('order', 'asc')
-      );
-    } else {
-      qRef = query(collection(db, 'modules'), orderBy('order', 'asc'));
+  async getModule(moduleId: string) {
+    try {
+      const isInitialized = await ensureFirebase();
+      if (!isInitialized || !db) {
+        return null;
+      }
+      const moduleRef = doc(db, 'modules', moduleId);
+      const moduleSnap = await getDoc(moduleRef);
+      if (!moduleSnap.exists()) return null;
+      return { id: moduleSnap.id, ...moduleSnap.data() };
+    } catch (error) {
+      console.error('Error fetching module:', error);
+      return null;
     }
-    const snapshot = await getDocs(qRef);
-    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  },
+
+  async getModules(courseId?: string) {
+    try {
+      const isInitialized = await ensureFirebase();
+      if (!isInitialized || !db) {
+        return [];
+      }
+      let qRef;
+      if (courseId) {
+        // Filter by courseId only, sort in JavaScript to avoid index requirement
+        qRef = query(
+          collection(db, 'modules'),
+          where('courseId', '==', courseId)
+        );
+      } else {
+        // Get all modules, sort in JavaScript
+        qRef = query(collection(db, 'modules'));
+      }
+      const snapshot = await getDocs(qRef);
+      const modules = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      
+      // Sort by order in JavaScript to avoid Firebase index requirement
+      return modules.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+    } catch (error) {
+      console.error('Error fetching modules:', error);
+      return []; // Return empty array on error
+    }
   },
 
   async createModule(moduleData: Record<string, any>) {
@@ -103,22 +142,30 @@ export const adminService = {
 
   // ===== Lessons =====
   async getLessons(moduleId?: string) {
-    await ensureFirebase();
-    let qRef;
-    if (moduleId) {
-      // Only filter by moduleId, sort in JavaScript to avoid index requirement
-      qRef = query(
-        collection(db, 'lessons'),
-        where('moduleId', '==', moduleId)
-      );
-    } else {
-      qRef = query(collection(db, 'lessons'));
+    try {
+      const isInitialized = await ensureFirebase();
+      if (!isInitialized || !db) {
+        return [];
+      }
+      let qRef;
+      if (moduleId) {
+        // Only filter by moduleId, sort in JavaScript to avoid index requirement
+        qRef = query(
+          collection(db, 'lessons'),
+          where('moduleId', '==', moduleId)
+        );
+      } else {
+        qRef = query(collection(db, 'lessons'));
+      }
+      const snapshot = await getDocs(qRef);
+      const lessons = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      
+      // Sort by order in JavaScript
+      return lessons.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
+    } catch (error) {
+      console.error('Error fetching lessons:', error);
+      return []; // Return empty array on error
     }
-    const snapshot = await getDocs(qRef);
-    const lessons = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-    
-    // Sort by order in JavaScript
-    return lessons.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
   },
 
   async createLesson(lessonData: Record<string, any>) {
