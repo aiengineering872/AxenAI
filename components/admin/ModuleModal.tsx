@@ -129,7 +129,7 @@ export const ModuleModal: React.FC<ModuleModalProps> = ({
               value={formData.courseId}
               onChange={(event) => handleChange('courseId', event.target.value)}
             className="w-full rounded-lg border border-card bg-card px-4 py-3 text-text focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={(!hasCourses && !isEditMode) || (preselectedCourseId && !isEditMode)}
+            disabled={(!hasCourses && !isEditMode) || (!!preselectedCourseId && !isEditMode)}
             >
               <option value="" disabled>
                 Select course

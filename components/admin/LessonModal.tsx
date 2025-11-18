@@ -10,6 +10,7 @@ interface LessonModalProps {
   onSuccess: () => void;
   lesson?: any;
   moduleId: string;
+  courseId?: string;
 }
 
 const defaultForm = {

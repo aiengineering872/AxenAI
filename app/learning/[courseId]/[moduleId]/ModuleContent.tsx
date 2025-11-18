@@ -39,12 +39,13 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
         setLoading(true);
         
         // Fetch module and lessons in parallel
-        const [module, firebaseLessons] = await Promise.all([
+        const [moduleData, firebaseLessons] = await Promise.all([
           adminService.getModule(moduleId),
           adminService.getLessons(moduleId),
         ]);
         
         // Set module title - only if exists in Firebase
+        const module = moduleData as any;
         if (module?.title) {
           setModuleTitle(module.title);
         } else {
