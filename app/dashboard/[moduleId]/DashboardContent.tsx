@@ -5,11 +5,12 @@ import dynamic from 'next/dynamic';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion } from 'framer-motion';
-import { Trophy, BookOpen, FlaskConical, TrendingUp, Sparkles, Target, ArrowLeft, Brain, Cpu } from 'lucide-react';
+import { Trophy, BookOpen, FlaskConical, TrendingUp, Sparkles, Target, ArrowLeft, Brain, Cpu, BookOpen as BookIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import ChartSkeleton from '@/components/dashboard/ChartSkeleton';
 import { learningProgressService } from '@/lib/services/learningProgressService';
+import { adminService } from '@/lib/services/adminService';
 
 const ModuleProgressChart = dynamic(
   () => import('@/components/dashboard/ModuleProgressChart'),
@@ -61,24 +62,20 @@ const inspirationalQuotes: Quote[] = [
   },
 ];
 
-const moduleConfigs: Record<string, { courseId: string; title: string; icon: React.ComponentType<{ className?: string }>; description: string }> = {
-  'ai-engineering': {
-    courseId: 'ai-engineering',
-    title: 'AI Engineering',
-    icon: Brain,
-    description: 'Master the fundamentals and advanced concepts of AI Engineering',
-  },
-  'aiml': {
-    courseId: 'aiml-engineering',
-    title: 'AIML',
-    icon: Cpu,
-    description: 'Comprehensive AI and Machine Learning engineering course',
-  },
+// Icon mapping helper
+const getCourseIcon = (courseId: string): React.ComponentType<{ className?: string }> => {
+  if (courseId.includes('aiml') || courseId.includes('ml')) {
+    return Cpu;
+  }
+  if (courseId.includes('ai')) {
+    return Brain;
+  }
+  return BookIcon;
 };
 
 export default function DashboardContent() {
   const params = useParams();
-  const moduleId = params.moduleId as string;
+  const courseId = params.moduleId as string; // Using moduleId as courseId for backward compatibility
   const { user, firebaseUser } = useAuth();
   const [quote, setQuote] = useState<Quote>(defaultQuote);
   const [aiTools, setAiTools] = useState<any[]>([]);
@@ -86,8 +83,36 @@ export default function DashboardContent() {
   const [completionData, setCompletionData] = useState<{ name: string; value: number; color: string }[]>([]);
   const [overallProgress, setOverallProgress] = useState(0);
   const [modulesCompleted, setModulesCompleted] = useState(0);
+  const [course, setCourse] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const moduleConfig = moduleConfigs[moduleId];
+  // Load course from Firebase
+  useEffect(() => {
+    const loadCourse = async () => {
+      try {
+        setLoading(true);
+        const courses = await adminService.getCourses();
+        const foundCourse = courses.find((c: any) => c.id === courseId);
+        setCourse(foundCourse);
+      } catch (error) {
+        console.error('Error loading course:', error);
+        setCourse(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (courseId) {
+      loadCourse();
+    }
+  }, [courseId]);
+
+  const moduleConfig = course ? {
+    courseId: course.id,
+    title: course.title || 'Course',
+    icon: getCourseIcon(course.id),
+    description: course.description || 'Comprehensive learning course',
+  } : null;
 
   useEffect(() => {
     if (!moduleConfig) return;
@@ -112,9 +137,9 @@ export default function DashboardContent() {
     const progress = learningProgressService.getDashboardProgressData(courseId);
     setProgressData(progress.length > 0 ? progress : [
       { name: 'Python', progress: 0 },
-      { name: courseId === 'ai-engineering' ? 'ML' : 'Machine Learning', progress: 0 },
+      { name: 'Machine Learning', progress: 0 },
       { name: 'Deep Learning', progress: 0 },
-      { name: courseId === 'ai-engineering' ? 'Generative AI' : 'MLOps', progress: 0 },
+      { name: 'MLOps', progress: 0 },
     ]);
 
     // Get completion status for pie chart
@@ -176,13 +201,25 @@ export default function DashboardContent() {
   const greetingName = resolvedName.split(' ')[0] || resolvedName;
   const greetingSuffix = greetingName ? `, ${greetingName}` : '';
 
-  if (!moduleConfig) {
+  if (loading) {
     return (
       <DashboardLayout>
         <div className="space-y-6">
           <div className="glass p-6 rounded-xl text-center">
-            <h1 className="text-2xl font-bold text-text mb-4">Module Not Found</h1>
-            <p className="text-textSecondary mb-6">The module you're looking for doesn't exist.</p>
+            <p className="text-textSecondary">Loading course...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!moduleConfig || !course) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="glass p-6 rounded-xl text-center">
+            <h1 className="text-2xl font-bold text-text mb-4">Course Not Found</h1>
+            <p className="text-textSecondary mb-6">The course you're looking for doesn't exist.</p>
             <Link href="/dashboard">
               <button className="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all">
                 Back to Dashboard

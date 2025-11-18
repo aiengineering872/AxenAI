@@ -43,12 +43,6 @@ const getStorageKey = (): string => {
 
 // Module definitions with lesson counts
 const MODULE_LESSONS: Record<string, Record<string, number>> = {
-  'ai-engineering': {
-    'python': 6,
-    'machine-learning': 6,
-    'deep-learning': 6,
-    'generative-ai': 6,
-  },
   'aiml': {
     'python': 6,
     'machine-learning': 6,
