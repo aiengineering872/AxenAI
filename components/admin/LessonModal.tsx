@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Plus, Trash2 } from 'lucide-react';
 import { adminService } from '@/lib/services/adminService';
 
 interface LessonModalProps {
@@ -19,6 +19,7 @@ const defaultForm = {
   videoUrl: '',
   googleColabUrl: '',
   order: 0,
+  simulators: [] as string[],
 };
 
 export const LessonModal: React.FC<LessonModalProps> = ({
@@ -46,6 +47,7 @@ export const LessonModal: React.FC<LessonModalProps> = ({
         videoUrl: lesson.videoUrl ?? '',
         googleColabUrl: lesson.googleColabUrl ?? '',
         order: lesson.order ?? 0,
+        simulators: Array.isArray(lesson.simulators) ? lesson.simulators : [],
       });
     } else {
       setFormData({
@@ -166,6 +168,51 @@ export const LessonModal: React.FC<LessonModalProps> = ({
               className="w-full rounded-lg border border-card bg-card px-4 py-3 text-text focus:outline-none focus:ring-2 focus:ring-primary"
               min={0}
             />
+          </div>
+
+          <div>
+            <h3 className="mb-2 text-lg font-semibold text-text">Simulators</h3>
+            <label className="mb-2 block text-sm font-medium text-textSecondary">
+              Simulator Topics (Optional)
+            </label>
+            <div className="space-y-2">
+              {formData.simulators.map((simulator, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={simulator}
+                    onChange={(event) => {
+                      const newSimulators = [...formData.simulators];
+                      newSimulators[index] = event.target.value;
+                      setFormData((prev) => ({ ...prev, simulators: newSimulators }));
+                    }}
+                    className="flex-1 rounded-lg border border-card bg-card px-4 py-2 text-text text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    placeholder="e.g., Machine Learning Simulator"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newSimulators = formData.simulators.filter((_, i) => i !== index);
+                      setFormData((prev) => ({ ...prev, simulators: newSimulators }));
+                    }}
+                    className="p-2 rounded-lg bg-card hover:bg-card/80 text-textSecondary hover:text-text transition-all"
+                    aria-label="Remove simulator"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData((prev) => ({ ...prev, simulators: [...prev.simulators, ''] }));
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/80 text-textSecondary hover:text-text transition-all text-sm"
+              >
+                <Plus className="w-4 h-4" />
+                Add Simulator Topic
+              </button>
+            </div>
           </div>
 
           <div className="mt-6 flex gap-4">

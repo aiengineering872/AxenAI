@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ModuleLayout } from '@/components/layout/ModuleLayout';
 import { motion } from 'framer-motion';
-import { CheckCircle, ArrowLeft, ArrowRight, ExternalLink } from 'lucide-react';
+import { CheckCircle, ArrowLeft, ArrowRight, ExternalLink, Video, Code2, Brain, Target, Grid3x3, ChevronRight, Code } from 'lucide-react';
 import Link from 'next/link';
 import { learningProgressService } from '@/lib/services/learningProgressService';
 import { adminService } from '@/lib/services/adminService';
@@ -14,6 +14,7 @@ interface Lesson {
   content: string;
   videoUrl?: string;
   googleColabUrl?: string;
+  simulators?: string[];
   completed: boolean;
   order?: number;
 }
@@ -60,6 +61,7 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
             content: lesson.content || '',
             videoUrl: lesson.videoUrl || undefined,
             googleColabUrl: lesson.googleColabUrl || undefined,
+            simulators: Array.isArray(lesson.simulators) ? lesson.simulators : [],
             completed: learningProgressService.isLessonCompleted(courseId, moduleId, lesson.id),
             order: lesson.order || 0,
           }));
@@ -361,9 +363,92 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
             {formatContent(lessons[currentLesson]?.content || '')}
           </div>
 
-          <div className="flex justify-center">
-            <div className="w-full max-w-4xl">
-              {renderVideoContent(lessons[currentLesson]?.videoUrl || '')}
+          {/* Video Lectures and Simulators Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            {/* Video Lectures Section - Takes 2 columns */}
+            <div className="lg:col-span-2 glass p-6 rounded-xl">
+              <div className="flex items-center gap-3 mb-4">
+                <Video className="w-5 h-5 text-primary" />
+                <h3 className="text-xl font-bold text-text">Video Lectures</h3>
+              </div>
+              <div className="bg-card/50 rounded-xl p-4 flex items-center justify-center min-h-[400px]">
+                {lessons[currentLesson]?.videoUrl ? (
+                  <div className="w-full aspect-video">
+                    {renderVideoContent(lessons[currentLesson]?.videoUrl || '')}
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <Video className="w-20 h-20 text-textSecondary mx-auto mb-4" />
+                    <p className="text-textSecondary">No videos available yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Simulators Section - Takes 1 column */}
+            <div className="lg:col-span-1 glass p-6 rounded-xl">
+              <div className="flex items-center gap-3 mb-4">
+                <Code2 className="w-5 h-5 text-primary" />
+                <h3 className="text-xl font-bold text-text">Simulators</h3>
+              </div>
+              <div className="space-y-3">
+                {lessons[currentLesson]?.simulators && lessons[currentLesson]?.simulators.length > 0 ? (
+                  lessons[currentLesson].simulators.map((simulatorName, index) => {
+                    // Map simulator name to type for URL
+                    const getSimulatorType = (name: string): string => {
+                      const lowerName = name.toLowerCase();
+                      if (lowerName.includes('machine learning') || lowerName.includes('ml')) {
+                        return 'machine-learning';
+                      }
+                      if (lowerName.includes('bias') || lowerName.includes('variance')) {
+                        return 'bias-variance';
+                      }
+                      if (lowerName.includes('confusion') || lowerName.includes('matrix')) {
+                        return 'confusion-matrix';
+                      }
+                      // Default fallback
+                      return 'machine-learning';
+                    };
+
+                    // Map simulator name to icon
+                    const getSimulatorIcon = (name: string) => {
+                      const lowerName = name.toLowerCase();
+                      if (lowerName.includes('machine learning') || lowerName.includes('ml')) {
+                        return Brain;
+                      }
+                      if (lowerName.includes('bias') || lowerName.includes('variance')) {
+                        return Target;
+                      }
+                      if (lowerName.includes('confusion') || lowerName.includes('matrix')) {
+                        return Grid3x3;
+                      }
+                      return Code;
+                    };
+
+                    const SimulatorIcon = getSimulatorIcon(simulatorName);
+                    // Create URL-friendly topic name
+                    const topicSlug = simulatorName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+                    return (
+                      <Link key={index} href={`/simulator/topic/${topicSlug}`}>
+                        <motion.div
+                          whileHover={{ scale: 1.02, x: 4 }}
+                          className="flex items-center gap-3 p-3 bg-card/50 rounded-xl hover:bg-card/70 cursor-pointer transition-all"
+                        >
+                          <SimulatorIcon className="w-5 h-5 text-primary" />
+                          <span className="flex-1 text-text font-medium text-sm">{simulatorName}</span>
+                          <ChevronRight className="w-4 h-4 text-textSecondary" />
+                        </motion.div>
+                      </Link>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-4">
+                    <Code className="w-12 h-12 text-textSecondary mx-auto mb-2" />
+                    <p className="text-textSecondary text-sm">No simulators available</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

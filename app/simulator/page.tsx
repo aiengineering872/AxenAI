@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
+import React, { useState, useEffect, useRef, ChangeEvent, Suspense } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { motion } from 'framer-motion';
-import { Play, Upload, Trash2, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Play, Upload, Trash2, Loader2, Brain, Target, Grid3x3 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 
 // Declare Pyodide types
 declare global {
@@ -15,7 +16,10 @@ declare global {
 const HTML_MARKER = '__HTML_OUTPUT__';
 type RichOutput = { type: 'html' | 'image' | 'text'; value: string };
 
-export default function CodeSimulatorPage() {
+function CodeSimulatorContent() {
+  const searchParams = useSearchParams();
+  const simulatorType = searchParams.get('type') || 'default';
+  
   const [code, setCode] = useState(`# Welcome to AI Code Simulator
 # Preloaded libraries: numpy, pandas, scikit-learn, matplotlib, scipy
 
@@ -52,6 +56,140 @@ print("Hello from AI Code Simulator!")`);
   const [datasetPath, setDatasetPath] = useState('');
   const [datasetExt, setDatasetExt] = useState('csv');
   const [richOutputs, setRichOutputs] = useState<RichOutput[]>([]);
+  const [showAnimation, setShowAnimation] = useState(true);
+
+  // Get simulator config based on type
+  const getSimulatorConfig = () => {
+    switch (simulatorType) {
+      case 'machine-learning':
+        return {
+          title: 'Machine Learning Simulator',
+          icon: Brain,
+          description: 'Practice machine learning concepts with interactive code',
+          defaultCode: `# Machine Learning Simulator
+# Preloaded libraries: numpy, pandas, scikit-learn, matplotlib
+
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+import matplotlib.pyplot as plt
+
+# Example: Simple Linear Regression
+np.random.seed(42)
+X = np.random.rand(100, 1) * 10
+y = 2.5 * X.ravel() + np.random.randn(100) * 2
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Train model
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+# Predictions
+y_pred = model.predict(X_test)
+
+# Evaluate
+mse = mean_squared_error(y_test, y_pred)
+print(f"Mean Squared Error: {mse:.2f}")
+print(f"Model Coefficients: {model.coef_[0]:.2f}")
+print(f"Model Intercept: {model.intercept_:.2f}")`
+        };
+      case 'bias-variance':
+        return {
+          title: 'Bias-Variance Tradeoff Simulator',
+          icon: Target,
+          description: 'Explore the bias-variance tradeoff in machine learning',
+          defaultCode: `# Bias-Variance Tradeoff Simulator
+# Preloaded libraries: numpy, pandas, scikit-learn, matplotlib
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import learning_curve
+
+# Example: Polynomial Regression - Bias vs Variance
+np.random.seed(42)
+X = np.random.rand(100, 1) * 10
+y = 2.5 * X.ravel() + np.random.randn(100) * 2 + 0.1 * X.ravel()**2
+
+print("Bias-Variance Tradeoff Example")
+print("Low degree = High bias, Low variance")
+print("High degree = Low bias, High variance")
+print(f"Data shape: {X.shape}")
+print(f"Target shape: {y.shape}")`
+        };
+      case 'confusion-matrix':
+        return {
+          title: 'Confusion Matrix Simulator',
+          icon: Grid3x3,
+          description: 'Visualize and understand confusion matrices',
+          defaultCode: `# Confusion Matrix Simulator
+# Preloaded libraries: numpy, pandas, scikit-learn, matplotlib
+
+import numpy as np
+import pandas as pd
+from sklearn.metrics import confusion_matrix, classification_report
+import matplotlib.pyplot as plt
+
+# Example: Generate confusion matrix
+y_true = np.array([0, 1, 0, 1, 1, 0, 1, 0, 0, 1])
+y_pred = np.array([0, 1, 0, 1, 0, 0, 1, 1, 0, 1])
+
+# Calculate confusion matrix
+cm = confusion_matrix(y_true, y_pred)
+print("Confusion Matrix:")
+print(cm)
+print("\nClassification Report:")
+print(classification_report(y_true, y_pred))`
+        };
+      default:
+        return {
+          title: 'AI Code Simulator',
+          icon: Brain,
+          description: 'Practice AI and ML concepts with interactive code',
+          defaultCode: `# Welcome to AI Code Simulator
+# Preloaded libraries: numpy, pandas, scikit-learn, matplotlib, scipy
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Example: Create a simple plot
+x = np.linspace(0, 10, 100)
+y = np.sin(x)
+
+plt.figure(figsize=(10, 6))
+plt.plot(x, y, label='sin(x)')
+plt.xlabel('X')
+plt.ylabel('Y')
+plt.title('Simple Plot Example')
+plt.legend()
+plt.grid(True)
+
+print("Hello from AI Code Simulator!")`
+        };
+    }
+  };
+
+  const simulatorConfig = getSimulatorConfig();
+  const SimulatorIcon = simulatorConfig.icon;
+
+  // Update code when simulator type changes
+  useEffect(() => {
+    if (mounted) {
+      const config = getSimulatorConfig();
+      setCode(config.defaultCode);
+      if (simulatorType !== 'default') {
+        setShowAnimation(true);
+        setTimeout(() => setShowAnimation(false), 1000);
+      }
+    }
+  }, [simulatorType, mounted]);
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -568,16 +706,52 @@ print(json.dumps(result, indent=2))
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <h1 className="text-3xl font-bold text-text mb-2">AI Code Simulator</h1>
-          <p className="text-textSecondary">
-            Write and execute Python code with preloaded ML libraries
-          </p>
-        </motion.div>
+        <AnimatePresence mode="wait">
+          {showAnimation && simulatorType !== 'default' ? (
+            <motion.div
+              key={simulatorType}
+              initial={{ opacity: 0, scale: 0.9, y: -20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="mb-8"
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <motion.div
+                  initial={{ rotate: -180, scale: 0 }}
+                  animate={{ rotate: 0, scale: 1 }}
+                  transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                >
+                  <SimulatorIcon className="w-8 h-8 text-primary" />
+                </motion.div>
+                <h1 className="text-3xl font-bold text-text">{simulatorConfig.title}</h1>
+              </div>
+              <motion.p
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
+                className="text-textSecondary"
+              >
+                {simulatorConfig.description}
+              </motion.p>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="default"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-8"
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <SimulatorIcon className="w-8 h-8 text-primary" />
+                <h1 className="text-3xl font-bold text-text">{simulatorConfig.title}</h1>
+              </div>
+              <p className="text-textSecondary">
+                {simulatorConfig.description}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Code Editor */}
@@ -821,6 +995,23 @@ print(json.dumps(result, indent=2))
         </motion.div>
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function CodeSimulatorPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="glass p-6 rounded-xl text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-textSecondary">Loading simulator...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    }>
+      <CodeSimulatorContent />
+    </Suspense>
   );
 }
 
