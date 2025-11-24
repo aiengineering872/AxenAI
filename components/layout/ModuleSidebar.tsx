@@ -2,15 +2,22 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { BookOpen, CheckCircle, Circle, Menu, X } from 'lucide-react';
-import { adminService } from '@/lib/services/adminService';
+import { BookOpen, CheckCircle, Circle, Menu, X, ChevronRight } from 'lucide-react';
 import { learningProgressService } from '@/lib/services/learningProgressService';
+import { useRouter } from 'next/navigation';
 
-interface Lesson {
+
+interface Module {
   id: string;
-  title: string;
-  order?: number;
-  completed: boolean;
+  number: string;
+  name: string;
+  order: number;
+  topics: Array<{
+    id: string;
+    name: string;
+    content: string;
+    order: number;
+  }>;
 }
 
 interface ModuleSidebarProps {
@@ -19,6 +26,9 @@ interface ModuleSidebarProps {
   currentLessonIndex: number;
   onLessonClick: (index: number) => void;
   moduleTitle?: string;
+  modules?: Module[];
+  selectedModuleIndex?: number | null;
+  onModuleSelect?: (index: number) => void;
 }
 
 export const ModuleSidebar: React.FC<ModuleSidebarProps> = ({
@@ -27,63 +37,69 @@ export const ModuleSidebar: React.FC<ModuleSidebarProps> = ({
   currentLessonIndex,
   onLessonClick,
   moduleTitle,
+  modules: propModules = [],
+  selectedModuleIndex = null,
+  onModuleSelect,
 }) => {
-  const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
 
-  const refreshLessons = async () => {
-    if (!moduleId) return;
+  // Debug: Log modules received
+  React.useEffect(() => {
+    console.log('ModuleSidebar - Received modules:', propModules);
+    console.log('ModuleSidebar - Modules count:', propModules.length);
+    console.log('ModuleSidebar - Modules array:', Array.isArray(propModules));
+  }, [propModules]);
 
-    try {
-      setLoading(true);
-      const firebaseLessons = await adminService.getLessons(moduleId);
-      
-      const lessonsWithProgress = firebaseLessons.map((lesson: any) => ({
-        id: lesson.id,
-        title: lesson.title || 'Untitled Lesson',
-        order: lesson.order || 0,
-        completed: learningProgressService.isLessonCompleted(
-          courseId,
-          moduleId,
-          lesson.id
-        ),
-      }));
-
-      // Sort by order
-      lessonsWithProgress.sort((a, b) => (a.order || 0) - (b.order || 0));
-      setLessons(lessonsWithProgress);
-    } catch (error) {
-      console.error('Error loading lessons:', error);
-      setLessons([]);
-    } finally {
-      setLoading(false);
+  // Auto-expand selected module and ensure it stays expanded
+  useEffect(() => {
+    if (selectedModuleIndex !== null && propModules[selectedModuleIndex]) {
+      const selectedModuleId = propModules[selectedModuleIndex].id;
+      setExpandedModules((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(selectedModuleId);
+        return newSet;
+      });
     }
+  }, [selectedModuleIndex, propModules]);
+
+  const handleModuleClick = (moduleIndex: number) => {
+    const module = propModules[moduleIndex];
+    if (!module) return;
+    
+    // Toggle expand/collapse
+    setExpandedModules((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(module.id)) {
+        newSet.delete(module.id);
+      } else {
+        newSet.add(module.id);
+      }
+      return newSet;
+    });
+    
+    // Select the module
+    if (onModuleSelect) {
+      onModuleSelect(moduleIndex);
+    }
+    
+    setIsMobileOpen(false);
   };
 
-  useEffect(() => {
-    refreshLessons();
-  }, [moduleId, courseId]);
-
-  // Refresh completion status when currentLessonIndex changes (lesson might have been completed)
-  useEffect(() => {
-    setLessons((prevLessons) => {
-      if (prevLessons.length === 0) return prevLessons;
-      
-      return prevLessons.map((lesson) => ({
-        ...lesson,
-        completed: learningProgressService.isLessonCompleted(
-          courseId,
-          moduleId,
-          lesson.id
-        ),
-      }));
-    });
-  }, [currentLessonIndex, courseId, moduleId]);
-
-  const handleLessonClick = (index: number) => {
-    onLessonClick(index);
-    setIsMobileOpen(false); // Close mobile menu on click
+  const handleTopicClick = (moduleIndex: number, topicIndex: number) => {
+    // If clicking a topic from a different module, select that module first
+    if (onModuleSelect && moduleIndex !== selectedModuleIndex) {
+      onModuleSelect(moduleIndex);
+      // After module is selected, topics will be loaded
+      // Use a small delay to ensure topics are loaded before clicking
+      setTimeout(() => {
+        onLessonClick(topicIndex);
+      }, 100);
+    } else {
+      // Module is already selected, topics should be loaded, click the topic
+      onLessonClick(topicIndex);
+    }
+    setIsMobileOpen(false);
   };
 
   const sidebarContent = (
@@ -91,54 +107,107 @@ export const ModuleSidebar: React.FC<ModuleSidebarProps> = ({
       <div className="p-4 border-b border-card/50">
         <div className="flex items-center gap-2 mb-2">
           <BookOpen className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold text-text text-sm">
-            {moduleTitle || 'Module Lessons'}
-          </h3>
+          <div>
+            <p className="text-xs text-textSecondary uppercase tracking-widest">Current subject</p>
+            <h3 className="font-semibold text-text text-sm">
+              {moduleTitle || 'Subject Overview'}
+            </h3>
+          </div>
         </div>
         <p className="text-xs text-textSecondary">
-          {lessons.length} {lessons.length === 1 ? 'lesson' : 'lessons'}
+          {propModules.length} {propModules.length === 1 ? 'module' : 'modules'}
         </p>
       </div>
 
-      <nav className="p-2 space-y-1 overflow-y-auto flex-1 max-h-[calc(100vh-120px)]">
-        {loading ? (
+      <nav className="p-2 space-y-2 overflow-y-auto flex-1 bg-background/40">
+        {propModules.length === 0 ? (
           <div className="p-4 text-center text-textSecondary text-sm">
-            Loading lessons...
-          </div>
-        ) : lessons.length === 0 ? (
-          <div className="p-4 text-center text-textSecondary text-sm">
-            No lessons available
+            No modules available
           </div>
         ) : (
-          lessons.map((lesson, index) => {
-            const isActive = index === currentLessonIndex;
-            const isCompleted = lesson.completed;
+          propModules
+            .sort((a, b) => a.order - b.order)
+            .map((module, moduleIndex) => {
+              const isExpanded = expandedModules.has(module.id);
+              const isSelected = selectedModuleIndex === moduleIndex;
+              const sortedTopics = [...module.topics].sort((a, b) => a.order - b.order);
+              
+              return (
+                <div
+                  key={module.id}
+                  className={`rounded-xl border transition ${
+                    isSelected
+                      ? 'border-primary/60 bg-primary/10 shadow-[0_0_12px_rgba(255,99,64,0.2)]'
+                      : 'border-card/40 bg-background/60 hover:border-card/60'
+                  }`}
+                >
+                  <button
+                    onClick={() => handleModuleClick(moduleIndex)}
+                    className="w-full flex items-center justify-between px-3 py-3 text-left"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-text">
+                        {module.number ? `Module ${module.number}` : `Module ${moduleIndex + 1}`}
+                        {module.name && module.name.trim() ? ` - ${module.name}` : ''}
+                      </p>
+                      <p className="text-xs text-textSecondary">
+                        {sortedTopics.length}{' '}
+                        {sortedTopics.length === 1 ? 'topic' : 'topics'}
+                      </p>
+                    </div>
+                    <ChevronRight
+                      className={`w-4 h-4 text-textSecondary transition-transform duration-200 ${
+                        isExpanded ? 'rotate-90 text-primary' : 'rotate-0'
+                      }`}
+                    />
+                  </button>
 
-            return (
-              <motion.button
-                key={lesson.id}
-                onClick={() => handleLessonClick(index)}
-                whileHover={{ x: 4 }}
-                whileTap={{ scale: 0.95 }}
-                className={`w-full text-left px-3 py-2.5 rounded-lg transition-all flex items-center gap-2 text-sm ${
-                  isActive
-                    ? 'bg-primary/20 text-primary shadow-glow'
-                    : isCompleted
-                    ? 'text-textSecondary hover:text-text hover:bg-card/50'
-                    : 'text-textSecondary hover:text-text hover:bg-card/50'
-                }`}
-              >
-                {isCompleted ? (
-                  <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                ) : (
-                  <Circle className="w-4 h-4 flex-shrink-0" />
-                )}
-                <span className="font-medium truncate flex-1">
-                  {index + 1}. {lesson.title}
-                </span>
-              </motion.button>
-            );
-          })
+                  {isExpanded && (
+                    <div className="border-t border-card/40">
+                      {sortedTopics.length === 0 ? (
+                        <p className="p-4 text-center text-xs text-textSecondary">
+                          No topics available
+                        </p>
+                      ) : (
+                        sortedTopics.map((topic, topicIndex) => {
+                          const isActiveTopic = isSelected && topicIndex === currentLessonIndex;
+                          const topicCompleted = learningProgressService.isLessonCompleted(
+                            courseId,
+                            moduleId,
+                            `${module.id}-${topic.id}`
+                          );
+                          
+                          return (
+                            <motion.button
+                              key={topic.id}
+                              onClick={() => handleTopicClick(moduleIndex, topicIndex)}
+                              whileHover={{ x: 4 }}
+                              whileTap={{ scale: 0.97 }}
+                              className={`w-full text-left px-4 py-2.5 flex items-center gap-2 text-sm transition-all ${
+                                isActiveTopic
+                                  ? 'bg-primary/20 text-primary shadow-glow'
+                                  : topicCompleted
+                                  ? 'text-textSecondary hover:text-text hover:bg-card/50'
+                                  : 'text-textSecondary hover:text-text hover:bg-card/30'
+                              }`}
+                            >
+                              {topicCompleted ? (
+                                <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                              ) : (
+                                <Circle className="w-4 h-4 flex-shrink-0" />
+                              )}
+                              <span className="font-medium truncate flex-1">
+                                {topicIndex + 1}. {topic.name}
+                              </span>
+                            </motion.button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
         )}
       </nav>
     </>
@@ -160,13 +229,9 @@ export const ModuleSidebar: React.FC<ModuleSidebarProps> = ({
       </button>
 
       {/* Desktop Sidebar */}
-      <motion.aside
-        initial={{ x: -100 }}
-        animate={{ x: 0 }}
-        className="hidden md:flex flex-col w-64 min-h-screen bg-card border-r border-primary/20 relative z-10"
-      >
+      <aside className="hidden md:flex flex-shrink-0 flex-col w-64 bg-background/90 backdrop-blur-md border-r border-card/40 shadow-[inset_-1px_0_0_rgba(255,255,255,0.05)] md:sticky md:top-0 md:h-screen md:max-h-screen md:overflow-y-auto">
         {sidebarContent}
-      </motion.aside>
+      </aside>
 
       {/* Mobile Sidebar */}
       {isMobileOpen && (

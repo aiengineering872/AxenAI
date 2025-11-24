@@ -71,7 +71,7 @@ export const adminService = {
     await deleteDoc(doc(db, 'courses', courseId));
   },
 
-  // ===== Modules =====
+  // ===== Modules (used as Subjects) =====
   async getModule(moduleId: string) {
     try {
       const isInitialized = await ensureFirebase();
@@ -96,23 +96,20 @@ export const adminService = {
       }
       let qRef;
       if (courseId) {
-        // Filter by courseId only, sort in JavaScript to avoid index requirement
         qRef = query(
           collection(db, 'modules'),
           where('courseId', '==', courseId)
         );
       } else {
-        // Get all modules, sort in JavaScript
         qRef = query(collection(db, 'modules'));
       }
       const snapshot = await getDocs(qRef);
       const modules = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
       
-      // Sort by order in JavaScript to avoid Firebase index requirement
       return modules.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
     } catch (error) {
       console.error('Error fetching modules:', error);
-      return []; // Return empty array on error
+      return [];
     }
   },
 
@@ -120,7 +117,6 @@ export const adminService = {
     await ensureFirebase();
     const docRef = await addDoc(collection(db, 'modules'), {
       ...moduleData,
-      lessons: moduleData.lessons ?? [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

@@ -1,24 +1,24 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Users, BookOpen, FlaskConical, MessageSquare, Plus, Edit, Trash2, TrendingUp, Clock, X, ChevronDown } from 'lucide-react';
+import { Users, BookOpen, FlaskConical, MessageSquare, Plus, Edit, Trash2, TrendingUp, Clock, ChevronDown } from 'lucide-react';
 import { adminService } from '@/lib/services/adminService';
-import ModuleModal from '@/components/admin/ModuleModal';
 import CourseModal from '@/components/admin/CourseModal';
 import ProjectModal from '@/components/admin/ProjectModal';
-import LessonModal from '@/components/admin/LessonModal';
-import { Toast } from '@/components/ui/Toast';
+import SubjectModal from '@/components/admin/SubjectModal';
+import TopicModal from '@/components/admin/TopicModal';
 
-type AdminTab = 'dashboard' | 'courses' | 'modules' | 'projects' | 'users' | 'faq';
+type AdminTab = 'dashboard' | 'courses' | 'subjects' | 'topics' | 'projects' | 'users' | 'faq';
 
 const tabs: Array<{ id: AdminTab; label: string; icon: React.ElementType }> = [
   { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
   { id: 'courses', label: 'Courses', icon: BookOpen },
-  { id: 'modules', label: 'Modules', icon: BookOpen },
+  { id: 'subjects', label: 'Subjects', icon: BookOpen },
+  { id: 'topics', label: 'Topics', icon: BookOpen },
   { id: 'projects', label: 'Projects', icon: FlaskConical },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'faq', label: 'FAQ', icon: MessageSquare },
@@ -70,27 +70,25 @@ export default function AdminPanelPage() {
     totalProjects: 0,
     totalCourses: 0,
   });
-  const [modules, setModules] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showModuleModal, setShowModuleModal] = useState(false);
-  const [editingModule, setEditingModule] = useState<any>(null);
   const [showCourseModal, setShowCourseModal] = useState(false);
   const [editingCourse, setEditingCourse] = useState<any>(null);
+  const [showSubjectModal, setShowSubjectModal] = useState(false);
+  const [editingSubject, setEditingSubject] = useState<any>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingProject, setEditingProject] = useState<any>(null);
-  const [showLessonModal, setShowLessonModal] = useState(false);
-  const [editingLesson, setEditingLesson] = useState<any>(null);
-  const [selectedModuleForLessons, setSelectedModuleForLessons] = useState<string | null>(null);
-  const [lessons, setLessons] = useState<any[]>([]);
-  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
-  const [showLessonDropdown, setShowLessonDropdown] = useState<string | null>(null);
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
-  const [toast, setToast] = useState<{ message: string; type: 'error' | 'success' | 'info' } | null>(null);
-
-  const hasCourses = courses.length > 0;
+  // Topics management state
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+  const [selectedModuleId, setSelectedModuleId] = useState<string>('');
+  const [subjectModules, setSubjectModules] = useState<any[]>([]);
+  const [topics, setTopics] = useState<any[]>([]);
+  const [showTopicModal, setShowTopicModal] = useState(false);
+  const [editingTopic, setEditingTopic] = useState<any>(null);
   
   // Sync courses from learning hub to Firebase
   const syncCoursesFromLearningHub = async () => {
@@ -121,7 +119,7 @@ export default function AdminPanelPage() {
       }
       
       // Reload courses after syncing
-      if (activeTab === 'courses' || activeTab === 'modules') {
+      if (activeTab === 'courses') {
         const updatedCourses = await adminService.getCourses();
         setCourses(updatedCourses);
       }
@@ -147,20 +145,47 @@ export default function AdminPanelPage() {
         await syncCoursesFromLearningHub();
       }
 
-      if (activeTab === 'modules') {
-        // Sync courses first
+      if (activeTab === 'subjects') {
         await syncCoursesFromLearningHub();
         
-        const [modulesData, coursesData] = await Promise.all([
+        const [subjectsData, coursesData] = await Promise.all([
           adminService.getModules(selectedCourseId || undefined),
           adminService.getCourses(),
         ]);
-        setModules(modulesData);
+        setSubjects(subjectsData);
+        setCourses(coursesData);
+      }
+
+      if (activeTab === 'topics') {
+        await syncCoursesFromLearningHub();
+        const coursesData = await adminService.getCourses();
         setCourses(coursesData);
         
-        // Load lessons for all modules
-        const allLessons = await adminService.getLessons();
-        setLessons(allLessons);
+        if (selectedCourseId) {
+          const subjectsData = await adminService.getModules(selectedCourseId);
+          setSubjects(subjectsData);
+        }
+        
+        if (selectedSubjectId) {
+          const subjectData = await adminService.getModule(selectedSubjectId);
+          if (subjectData?.modules && Array.isArray(subjectData.modules)) {
+            setSubjectModules(subjectData.modules);
+          } else {
+            setSubjectModules([]);
+          }
+        }
+        
+        if (selectedSubjectId && selectedModuleId) {
+          const subjectData = await adminService.getModule(selectedSubjectId);
+          if (subjectData?.modules) {
+            const module = subjectData.modules.find((m: any) => m.id === selectedModuleId);
+            if (module?.topics) {
+              setTopics(module.topics);
+            } else {
+              setTopics([]);
+            }
+          }
+        }
       }
 
       if (activeTab === 'projects') {
@@ -178,24 +203,14 @@ export default function AdminPanelPage() {
     setLoading(false);
   }, [activeTab, selectedCourseId]);
 
-  useEffect(() => {
-    if (activeTab === 'modules') {
-      console.log('Courses:', courses);
-      console.log('Has courses:', hasCourses);
-    }
-  }, [activeTab, courses, hasCourses]);
-  
   // Sync courses when admin panel loads (only once)
   useEffect(() => {
-    if (isAdmin && !authLoading) {
+    if (isAdmin && !authLoading && activeTab === 'courses') {
       syncCoursesFromLearningHub().then(() => {
-        // Reload data after syncing
-        if (activeTab === 'courses' || activeTab === 'modules') {
-          void loadData();
-        }
+        void loadData();
       });
     }
-    // eslint-disable-next-line react-hooks-exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, authLoading, activeTab, loadData]);
 
   useEffect(() => {
@@ -209,63 +224,6 @@ export default function AdminPanelPage() {
       void loadData();
     }
   }, [isAdmin, loadData]);
-
-  // Close lesson dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (showLessonDropdown && !target.closest('.lesson-dropdown-container')) {
-        setShowLessonDropdown(null);
-      }
-    };
-
-    if (showLessonDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
-    }
-  }, [showLessonDropdown]);
-
-  const handleDeleteModule = async (moduleId: string) => {
-    if (!confirm('Delete this module? This action cannot be undone.')) return;
-
-    try {
-      await adminService.deleteModule(moduleId);
-      await loadData();
-    } catch (error) {
-      console.error('Error deleting module:', error);
-      alert('Failed to delete module. Please try again.');
-    }
-  };
-
-  const handleDeleteLesson = async (lessonId: string) => {
-    if (!confirm('Delete this lesson? This action cannot be undone.')) return;
-
-    try {
-      await adminService.deleteLesson(lessonId);
-      await loadData();
-    } catch (error) {
-      console.error('Error deleting lesson:', error);
-      alert('Failed to delete lesson. Please try again.');
-    }
-  };
-
-  const toggleModuleExpansion = async (moduleId: string) => {
-    const newExpanded = new Set(expandedModules);
-    if (newExpanded.has(moduleId)) {
-      newExpanded.delete(moduleId);
-    } else {
-      newExpanded.add(moduleId);
-      // Load lessons for this module
-      const moduleLessons = await adminService.getLessons(moduleId);
-      setLessons((prev) => {
-        const filtered = prev.filter((l) => l.moduleId !== moduleId);
-        return [...filtered, ...moduleLessons];
-      });
-    }
-    setExpandedModules(newExpanded);
-  };
 
   const handleDeleteProject = async (projectId: string) => {
     if (!confirm('Delete this project?')) return;
@@ -284,7 +242,7 @@ export default function AdminPanelPage() {
   };
 
   const handleDeleteCourse = async (courseId: string) => {
-    if (!confirm('Delete this course? This will also remove related modules.')) return;
+    if (!confirm('Delete this course? This action cannot be undone.')) return;
 
     try {
       await adminService.deleteCourse(courseId);
@@ -292,6 +250,18 @@ export default function AdminPanelPage() {
     } catch (error) {
       console.error('Error deleting course:', error);
       alert('Failed to delete course. Please try again.');
+    }
+  };
+
+  const handleDeleteSubject = async (subjectId: string) => {
+    if (!confirm('Delete this subject? This action cannot be undone.')) return;
+
+    try {
+      await adminService.deleteModule(subjectId);
+      await loadData();
+    } catch (error) {
+      console.error('Error deleting subject:', error);
+      alert('Failed to delete subject. Please try again.');
     }
   };
 
@@ -338,20 +308,13 @@ export default function AdminPanelPage() {
         </div>
 
         {activeTab === 'dashboard' && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             <div className="glass rounded-xl p-6">
               <div className="mb-4 flex items-center justify-between">
                 <Users className="h-8 w-8 text-primary" />
                 <span className="text-3xl font-bold">{stats.totalUsers}</span>
               </div>
               <p className="text-textSecondary">Total Learners</p>
-            </div>
-            <div className="glass rounded-xl p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <BookOpen className="h-8 w-8 text-primary" />
-                <span className="text-3xl font-bold">{stats.totalModules}</span>
-              </div>
-              <p className="text-textSecondary">Modules</p>
             </div>
             <div className="glass rounded-xl p-6">
               <div className="mb-4 flex items-center justify-between">
@@ -431,19 +394,17 @@ export default function AdminPanelPage() {
           </motion.div>
         )}
 
-        {activeTab === 'modules' && (
+        {activeTab === 'subjects' && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <h2 className="text-xl font-bold text-text">Learning Modules</h2>
+              <h2 className="text-xl font-bold text-text">Subjects</h2>
               
               <div className="flex items-center gap-3">
-                {/* Course Selector */}
                 <div className="relative">
                   <select
                     value={selectedCourseId}
                     onChange={(e) => {
                       setSelectedCourseId(e.target.value);
-                      setExpandedModules(new Set()); // Reset expanded modules when course changes
                     }}
                     className="appearance-none rounded-lg border border-card bg-card px-4 py-2 pr-10 text-text focus:outline-none focus:ring-2 focus:ring-primary"
                   >
@@ -463,225 +424,291 @@ export default function AdminPanelPage() {
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    if (!hasCourses) {
-                      setToast({ message: 'Please create a course first before adding modules. Go to the "Courses" tab to create one.', type: 'error' });
+                    if (courses.length === 0) {
+                      alert('Please create a course first before adding subjects. Go to the "Courses" tab to create one.');
                       return;
                     }
                     
                     if (!selectedCourseId) {
-                      setToast({ message: 'Please select a course first', type: 'error' });
+                      alert('Please select a course first');
                       return;
                     }
                     
-                    setEditingModule(null);
-                    setShowModuleModal(true);
+                    setEditingSubject(null);
+                    setShowSubjectModal(true);
                   }}
                   className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-white transition hover:bg-primary/90 relative z-10 cursor-pointer"
                   style={{ 
                     pointerEvents: 'auto',
-                    opacity: hasCourses && selectedCourseId ? 1 : 0.5,
+                    opacity: courses.length > 0 && selectedCourseId ? 1 : 0.5,
                   }}
                 >
                   <Plus className="h-5 w-5" />
-                  Add Module
+                  Add Subject
                 </button>
               </div>
             </div>
             
             {selectedCourseId && (
               <p className="text-sm text-textSecondary">
-                Showing modules for: <span className="font-medium text-text">{courses.find(c => c.id === selectedCourseId)?.title || 'Unknown'}</span>
+                Showing subjects for: <span className="font-medium text-text">{courses.find(c => c.id === selectedCourseId)?.title || 'Unknown'}</span>
               </p>
             )}
 
-            {!loading && !hasCourses && (
+            {!loading && courses.length === 0 && (
               <p className="rounded-lg bg-card/60 p-4 text-sm text-textSecondary">
-                Create a course first, then you can add modules to it.
+                Create a course first, then you can add subjects to it.
               </p>
             )}
 
             {loading ? (
-              <div className="py-8 text-center">Loading modules...</div>
+              <div className="py-8 text-center">Loading subjects...</div>
             ) : (
               <div className="glass rounded-xl p-6">
                 <div className="space-y-4">
-                  {modules.map((module) => {
-                    const course = courses.find((courseItem) => courseItem.id === module.courseId);
-                    const moduleLessons = lessons.filter((l) => l.moduleId === module.id).sort((a, b) => (a.order || 0) - (b.order || 0));
-                    const isExpanded = expandedModules.has(module.id);
+                  {subjects.map((subject) => {
+                    const course = courses.find((courseItem) => courseItem.id === subject.courseId);
                     
                     return (
-                      <div key={module.id} className="rounded-lg bg-card/50 transition hover:bg-card">
-                        <div className="flex items-center justify-between p-4">
+                      <div key={subject.id} className="flex items-center justify-between rounded-lg bg-card/50 p-4 transition hover:bg-card">
+                        <div>
+                          <h3 className="font-medium text-text">{subject.title}</h3>
+                          <p className="text-sm text-textSecondary">
+                            {course?.title ?? 'Unassigned'} • {subject.difficulty} • {subject.duration}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingSubject(subject);
+                              setShowSubjectModal(true);
+                            }}
+                            className="rounded p-2 transition hover:bg-card"
+                          >
+                            <Edit className="h-5 w-5 text-textSecondary" />
+                          </button>
+                          <button onClick={() => handleDeleteSubject(subject.id)} className="rounded p-2 transition hover:bg-card">
+                            <Trash2 className="h-5 w-5 text-red-400" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {subjects.length === 0 && selectedCourseId && (
+                    <div className="py-8 text-center text-textSecondary">No subjects yet for this course. Click "Add Subject" to create one.</div>
+                  )}
+                  
+                  {subjects.length === 0 && !selectedCourseId && (
+                    <div className="py-8 text-center text-textSecondary">Please select a course to view its subjects.</div>
+                  )}
+                </div>
+              </div>
+          )}
+        </motion.div>
+        )}
+
+        {activeTab === 'topics' && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <h2 className="text-xl font-bold text-text">Topics</h2>
+            </div>
+
+            {/* Course Selection */}
+            <div className="glass rounded-xl p-6">
+              <label className="mb-2 block text-sm font-medium text-textSecondary">Select Course</label>
+              <select
+                value={selectedCourseId}
+                onChange={(e) => {
+                  setSelectedCourseId(e.target.value);
+                  setSelectedSubjectId('');
+                  setSelectedModuleId('');
+                  setSubjectModules([]);
+                  setTopics([]);
+                }}
+                className="w-full rounded-lg border border-card bg-card px-4 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="">Select Course</option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Subject Selection */}
+            {selectedCourseId && (
+              <div className="glass rounded-xl p-6">
+                <label className="mb-2 block text-sm font-medium text-textSecondary">Select Subject</label>
+                <select
+                  value={selectedSubjectId}
+                  onChange={async (e) => {
+                    const subjectId = e.target.value;
+                    setSelectedSubjectId(subjectId);
+                    setSelectedModuleId('');
+                    setTopics([]);
+                    if (subjectId) {
+                      const subjectData = await adminService.getModule(subjectId);
+                      if (subjectData?.modules && Array.isArray(subjectData.modules)) {
+                        setSubjectModules(subjectData.modules);
+                      } else {
+                        setSubjectModules([]);
+                      }
+                    } else {
+                      setSubjectModules([]);
+                    }
+                  }}
+                  className="w-full rounded-lg border border-card bg-card px-4 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">Select Subject</option>
+                  {subjects
+                    .filter((s) => s.courseId === selectedCourseId)
+                    .map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.title}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+
+            {/* Module Selection */}
+            {selectedSubjectId && subjectModules.length > 0 && (
+              <div className="glass rounded-xl p-6">
+                <label className="mb-2 block text-sm font-medium text-textSecondary">Select Module</label>
+                <select
+                  value={selectedModuleId}
+                  onChange={async (e) => {
+                    const moduleId = e.target.value;
+                    setSelectedModuleId(moduleId);
+                    if (moduleId && selectedSubjectId) {
+                      const subjectData = await adminService.getModule(selectedSubjectId);
+                      if (subjectData?.modules) {
+                        const module = subjectData.modules.find((m: any) => m.id === moduleId);
+                        if (module?.topics) {
+                          setTopics(module.topics);
+                        } else {
+                          setTopics([]);
+                        }
+                      }
+                    } else {
+                      setTopics([]);
+                    }
+                  }}
+                  className="w-full rounded-lg border border-card bg-card px-4 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">Select Module</option>
+                  {subjectModules.map((module: any) => (
+                    <option key={module.id} value={module.id}>
+                      {module.number ? `Module ${module.number}` : 'Module'} - {module.name || 'Unnamed'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Topics List */}
+            {selectedModuleId && (
+              <div className="glass rounded-xl p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-text">Topics</h3>
+                  <button
+                    onClick={() => {
+                      setEditingTopic(null);
+                      setShowTopicModal(true);
+                    }}
+                    className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-white transition hover:bg-primary/90"
+                  >
+                    <Plus className="h-5 w-5" />
+                    Add Topic
+                  </button>
+                </div>
+
+                {loading ? (
+                  <div className="py-8 text-center">Loading topics...</div>
+                ) : topics.length === 0 ? (
+                  <div className="py-8 text-center text-textSecondary">No topics yet. Click "Add Topic" to create one.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {topics
+                      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                      .map((topic: any) => (
+                        <div
+                          key={topic.id}
+                          className="flex items-center justify-between rounded-lg bg-card/50 p-4 transition hover:bg-card"
+                        >
                           <div className="flex-1">
-                            <div className="flex items-center gap-3">
-                              <button
-                                onClick={() => toggleModuleExpansion(module.id)}
-                                className="text-textSecondary hover:text-text transition"
-                              >
-                                {isExpanded ? '▼' : '▶'}
-                              </button>
-                              <div>
-                                <h3 className="font-medium text-text">{module.title}</h3>
-                                <p className="text-sm text-textSecondary">
-                                  {course?.title ?? 'Unassigned'} • {module.difficulty} • {module.duration} • {moduleLessons.length} lessons
-                                </p>
-                              </div>
-                            </div>
+                            <h4 className="font-medium text-text">{topic.name || 'Unnamed Topic'}</h4>
+                            <p className="mt-1 text-sm text-textSecondary line-clamp-2">
+                              {topic.content || 'No content'}
+                            </p>
                           </div>
-                          <div className="flex items-center gap-2 relative lesson-dropdown-container">
-                            <button
-                              onClick={async () => {
-                                // Load lessons for this module if not already loaded
-                                if (moduleLessons.length === 0) {
-                                  const moduleLessonsData = await adminService.getLessons(module.id);
-                                  setLessons((prev) => {
-                                    const filtered = prev.filter((l) => l.moduleId !== module.id);
-                                    return [...filtered, ...moduleLessonsData];
-                                  });
-                                }
-                                // Toggle dropdown
-                                setShowLessonDropdown(showLessonDropdown === module.id ? null : module.id);
-                              }}
-                              className="flex items-center gap-1 rounded px-3 py-1.5 text-sm bg-primary/20 text-primary hover:bg-primary/30 transition relative z-10"
-                              title="Add/Edit Lessons"
-                            >
-                              <Plus className="h-4 w-4" />
-                              Add Lesson
-                            </button>
-                            
-                            {showLessonDropdown === module.id && (
-                              <div className="absolute right-0 top-full mt-2 w-80 glass rounded-lg border border-card/50 p-4 z-50 shadow-xl">
-                                <div className="mb-3 flex items-center justify-between">
-                                  <h4 className="font-semibold text-text">Lessons for {module.title}</h4>
-                                  <button
-                                    onClick={() => setShowLessonDropdown(null)}
-                                    className="text-textSecondary hover:text-text"
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </button>
-                                </div>
-                                
-                                <div className="max-h-64 space-y-2 overflow-y-auto">
-                                  {moduleLessons.length === 0 ? (
-                                    <p className="text-sm text-textSecondary text-center py-4">No lessons yet.</p>
-                                  ) : (
-                                    moduleLessons.map((lesson) => (
-                                      <div
-                                        key={lesson.id}
-                                        className="flex items-center justify-between rounded bg-card/30 p-2 hover:bg-card/50 transition"
-                                      >
-                                        <div className="flex-1 min-w-0">
-                                          <h5 className="text-sm font-medium text-text truncate">{lesson.title}</h5>
-                                          <p className="text-xs text-textSecondary">Order: {lesson.order || 0}</p>
-                                        </div>
-                                        <div className="flex items-center gap-1 ml-2">
-                                          <button
-                                            onClick={() => {
-                                              setSelectedModuleForLessons(module.id);
-                                              setEditingLesson(lesson);
-                                              setShowLessonModal(true);
-                                              setShowLessonDropdown(null);
-                                            }}
-                                            className="rounded p-1.5 transition hover:bg-card"
-                                            title="Edit Lesson"
-                                          >
-                                            <Edit className="h-3.5 w-3.5 text-textSecondary" />
-                                          </button>
-                                          <button
-                                            onClick={() => {
-                                              if (confirm('Delete this lesson?')) {
-                                                handleDeleteLesson(lesson.id);
-                                              }
-                                            }}
-                                            className="rounded p-1.5 transition hover:bg-card"
-                                            title="Delete Lesson"
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))
-                                  )}
-                                </div>
-                                
-                                <div className="mt-3 border-t border-card/50 pt-3">
-                                  <button
-                                    onClick={() => {
-                                      setSelectedModuleForLessons(module.id);
-                                      setEditingLesson(null);
-                                      setShowLessonModal(true);
-                                      setShowLessonDropdown(null);
-                                    }}
-                                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm text-white transition hover:bg-primary/90"
-                                  >
-                                    <Plus className="h-4 w-4" />
-                                    Add New Lesson
-                                  </button>
-                                </div>
-                              </div>
-                            )}
+                          <div className="flex items-center gap-2">
                             <button
                               onClick={() => {
-                                setEditingModule(module);
-                                setShowModuleModal(true);
+                                setEditingTopic({ ...topic, moduleId: selectedModuleId, subjectId: selectedSubjectId });
+                                setShowTopicModal(true);
                               }}
                               className="rounded p-2 transition hover:bg-card"
                             >
                               <Edit className="h-5 w-5 text-textSecondary" />
                             </button>
-                            <button onClick={() => handleDeleteModule(module.id)} className="rounded p-2 transition hover:bg-card">
+                            <button
+                              onClick={async () => {
+                                if (!confirm('Delete this topic? This action cannot be undone.')) return;
+                                try {
+                                  const subjectData = await adminService.getModule(selectedSubjectId);
+                                  if (subjectData?.modules) {
+                                    const updatedModules = subjectData.modules.map((m: any) => {
+                                      if (m.id === selectedModuleId) {
+                                        return {
+                                          ...m,
+                                          topics: (m.topics || []).filter((t: any) => t.id !== topic.id),
+                                        };
+                                      }
+                                      return m;
+                                    });
+                                    await adminService.updateModule(selectedSubjectId, {
+                                      ...subjectData,
+                                      modules: updatedModules,
+                                    });
+                                    // Reload topics
+                                    const module = updatedModules.find((m: any) => m.id === selectedModuleId);
+                                    setTopics(module?.topics || []);
+                                  }
+                                } catch (error) {
+                                  console.error('Error deleting topic:', error);
+                                  alert('Failed to delete topic. Please try again.');
+                                }
+                              }}
+                              className="rounded p-2 transition hover:bg-card"
+                            >
                               <Trash2 className="h-5 w-5 text-red-400" />
                             </button>
                           </div>
                         </div>
-                        
-                        {isExpanded && (
-                          <div className="border-t border-card/50 p-4 space-y-2">
-                            {moduleLessons.length === 0 ? (
-                              <p className="text-sm text-textSecondary text-center py-4">No lessons yet. Click "Add Lesson" to create one.</p>
-                            ) : (
-                              moduleLessons.map((lesson) => (
-                                <div key={lesson.id} className="flex items-center justify-between rounded bg-card/30 p-3">
-                                  <div>
-                                    <h4 className="text-sm font-medium text-text">{lesson.title}</h4>
-                                    <p className="text-xs text-textSecondary">Order: {lesson.order || 0}</p>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={() => {
-                                        setSelectedModuleForLessons(module.id);
-                                        setEditingLesson(lesson);
-                                        setShowLessonModal(true);
-                                      }}
-                                      className="rounded p-1.5 transition hover:bg-card"
-                                    >
-                                      <Edit className="h-4 w-4 text-textSecondary" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteLesson(lesson.id)}
-                                      className="rounded p-1.5 transition hover:bg-card"
-                                    >
-                                      <Trash2 className="h-4 w-4 text-red-400" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-                  {modules.length === 0 && selectedCourseId && (
-                    <div className="py-8 text-center text-textSecondary">No modules yet for this course. Click "Add Module" to create one.</div>
-                  )}
-                  
-                  {modules.length === 0 && !selectedCourseId && (
-                    <div className="py-8 text-center text-textSecondary">Please select a course to view its modules.</div>
-                  )}
-                </div>
+            {selectedCourseId && !selectedSubjectId && (
+              <div className="rounded-lg bg-card/60 p-4 text-sm text-textSecondary">
+                Select a subject to manage topics.
+              </div>
+            )}
+
+            {selectedSubjectId && subjectModules.length === 0 && (
+              <div className="rounded-lg bg-card/60 p-4 text-sm text-textSecondary">
+                This subject has no modules. Add modules in the Subjects tab first.
+              </div>
+            )}
+
+            {selectedSubjectId && subjectModules.length > 0 && !selectedModuleId && (
+              <div className="rounded-lg bg-card/60 p-4 text-sm text-textSecondary">
+                Select a module to manage topics.
               </div>
             )}
           </motion.div>
@@ -871,37 +898,6 @@ export default function AdminPanelPage() {
           course={editingCourse}
         />
 
-        <ModuleModal
-          isOpen={showModuleModal}
-          onClose={() => {
-            setShowModuleModal(false);
-            setEditingModule(null);
-          }}
-          onSuccess={() => {
-            void loadData();
-            setToast({ message: editingModule ? 'Module updated successfully!' : 'Module created successfully!', type: 'success' });
-          }}
-          module={editingModule}
-          courses={courses}
-          preselectedCourseId={selectedCourseId}
-        />
-
-        <LessonModal
-          isOpen={showLessonModal}
-          onClose={() => {
-            setShowLessonModal(false);
-            setEditingLesson(null);
-            setSelectedModuleForLessons(null);
-          }}
-          onSuccess={() => {
-            void loadData();
-            setToast({ message: editingLesson ? 'Lesson updated successfully!' : 'Lesson created successfully!', type: 'success' });
-          }}
-          lesson={editingLesson}
-          moduleId={selectedModuleForLessons || ''}
-          courseId={selectedCourseId || modules.find(m => m.id === selectedModuleForLessons)?.courseId}
-        />
-
         <ProjectModal
           isOpen={showProjectModal}
           onClose={() => {
@@ -911,16 +907,60 @@ export default function AdminPanelPage() {
           onSuccess={handleProjectSaved}
           project={editingProject}
         />
+
+        <SubjectModal
+          isOpen={showSubjectModal}
+          onClose={() => {
+            setShowSubjectModal(false);
+            setEditingSubject(null);
+          }}
+          onSuccess={() => {
+            void loadData();
+          }}
+          subject={editingSubject}
+          courses={courses}
+          preselectedCourseId={selectedCourseId}
+        />
+
+        <TopicModal
+          isOpen={showTopicModal}
+          onClose={() => {
+            setShowTopicModal(false);
+            setEditingTopic(null);
+          }}
+          onSuccess={async () => {
+            // Reload subject data after save to ensure modules are preserved
+            if (selectedSubjectId) {
+              const subjectData = await adminService.getModule(selectedSubjectId);
+              console.log('Reloading after topic save - Subject data:', subjectData);
+              console.log('Reloading after topic save - Modules:', subjectData?.modules);
+              
+              if (subjectData?.modules && Array.isArray(subjectData.modules)) {
+                // Update subjectModules to reflect any changes
+                setSubjectModules(subjectData.modules);
+                
+                // Update topics for selected module
+                if (selectedModuleId) {
+                  const module = subjectData.modules.find((m: any) => m.id === selectedModuleId);
+                  if (module?.topics) {
+                    setTopics(module.topics);
+                  } else {
+                    setTopics([]);
+                  }
+                }
+              } else {
+                console.warn('No modules found after topic save!');
+                setSubjectModules([]);
+                setTopics([]);
+              }
+            }
+            void loadData();
+          }}
+          topic={editingTopic}
+          moduleId={selectedModuleId}
+          subjectId={selectedSubjectId}
+        />
         
-        {/* Toast Notification */}
-        {toast && (
-          <Toast
-            message={toast.message}
-            type={toast.type}
-            isVisible={!!toast}
-            onClose={() => setToast(null)}
-          />
-        )}
       </div>
     </DashboardLayout>
   );

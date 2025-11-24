@@ -8,6 +8,21 @@ import Link from 'next/link';
 import { learningProgressService } from '@/lib/services/learningProgressService';
 import { adminService } from '@/lib/services/adminService';
 
+interface Topic {
+  id: string;
+  name: string;
+  content: string;
+  order: number;
+}
+
+interface Module {
+  id: string;
+  number: string;
+  name: string;
+  order: number;
+  topics: Topic[];
+}
+
 interface Lesson {
   id: string;
   title: string;
@@ -28,61 +43,209 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
   const [currentLesson, setCurrentLesson] = useState(0);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [moduleTitle, setModuleTitle] = useState<string>('');
+  const [courseTitle, setCourseTitle] = useState<string>('');
   const [loading, setLoading] = useState(true);
+  const [subjectModules, setSubjectModules] = useState<Module[]>([]);
+  const [selectedModuleIndex, setSelectedModuleIndex] = useState<number | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Load module info and lessons from Firebase - only use Firebase data
+  // Load subject (moduleId) and its modules from Firebase
   useEffect(() => {
-    const loadModuleAndLessons = async () => {
+    const loadSubjectAndModules = async () => {
       if (!moduleId || !courseId) return;
 
       try {
         setLoading(true);
         
-        // Fetch module and lessons in parallel
-        const [moduleData, firebaseLessons] = await Promise.all([
+        // Fetch course and subject data in parallel
+        const [courseData, subjectData] = await Promise.all([
+          adminService.getCourse(courseId),
           adminService.getModule(moduleId),
-          adminService.getLessons(moduleId),
         ]);
         
-        // Set module title - only if exists in Firebase
-        const module = moduleData as any;
-        if (module?.title) {
-          setModuleTitle(module.title);
+        // Set course title
+        if (courseData && (courseData as any)?.title) {
+          setCourseTitle((courseData as any).title);
+        } else {
+          setCourseTitle('');
+        }
+        
+        if (!subjectData) {
+          setModuleTitle('');
+          setSubjectModules([]);
+          setLessons([]);
+          return;
+        }
+        
+        // Set subject title
+        const subject = subjectData as any;
+        if (subject?.title) {
+          setModuleTitle(subject.title);
         } else {
           setModuleTitle('');
         }
         
-        // Process lessons - only use Firebase data
-        if (firebaseLessons.length > 0) {
-          const lessonsWithProgress = firebaseLessons.map((lesson: any) => ({
-            id: lesson.id,
-            title: lesson.title || '',
-            content: lesson.content || '',
-            videoUrl: lesson.videoUrl || undefined,
-            googleColabUrl: lesson.googleColabUrl || undefined,
-            simulators: Array.isArray(lesson.simulators) ? lesson.simulators : [],
-            completed: learningProgressService.isLessonCompleted(courseId, moduleId, lesson.id),
-            order: lesson.order || 0,
-          }));
+        // Load modules from subject - always preserve modules even if topics are missing
+        console.log('Subject loaded:', subject);
+        console.log('Subject modules:', subject?.modules);
+        console.log('Is array?', Array.isArray(subject?.modules));
+        console.log('Modules length:', subject?.modules?.length);
+        console.log('Full subject data:', JSON.stringify(subject, null, 2));
+        
+        // Check for modules in various possible locations
+        let modulesToProcess: any[] = [];
+        if (subject?.modules && Array.isArray(subject.modules)) {
+          modulesToProcess = subject.modules;
+        } else if (Array.isArray(subject)) {
+          // Subject itself might be an array of modules
+          modulesToProcess = subject;
+        }
+        
+        console.log('Modules to process:', modulesToProcess);
+        console.log('Modules to process length:', modulesToProcess.length);
+        
+        if (modulesToProcess.length > 0) {
+          // Process modules - preserve ALL modules, even if they're incomplete
+          const processedModules: Module[] = modulesToProcess
+            .filter((m: any) => m !== null && m !== undefined) // Only filter out null/undefined
+            .map((m: any, index: number) => {
+              // Safely process topics - preserve all topics
+              let topics: Topic[] = [];
+              try {
+                if (Array.isArray(m.topics) && m.topics.length > 0) {
+                  topics = m.topics
+                    .filter((t: any) => t !== null && t !== undefined) // Only filter out null/undefined
+                    .map((t: any, topicIndex: number) => ({
+                      id: t.id || `topic-${index}-${topicIndex}-${Date.now()}`,
+                      name: t.name || '',
+                      content: t.content || '',
+                      order: t.order ?? topicIndex,
+                    }));
+                }
+              } catch (error) {
+                console.error('Error processing topics for module:', error);
+                topics = []; // If topics are malformed, use empty array
+              }
+              
+              // Always preserve module, even if incomplete
+              return {
+                id: m.id || `module-${index}-${Date.now()}`,
+                number: m.number || String(index + 1),
+                name: m.name || `Module ${index + 1}`,
+                order: m.order ?? index,
+                topics: topics,
+              };
+            });
           
-          // Sort by order
-          lessonsWithProgress.sort((a, b) => (a.order || 0) - (b.order || 0));
-          setLessons(lessonsWithProgress);
+          // Sort modules by order
+          processedModules.sort((a, b) => a.order - b.order);
+          console.log('Processed modules:', processedModules);
+          console.log('Processed modules count:', processedModules.length);
+          setSubjectModules(processedModules);
+          
+          // Auto-select first module if none selected
+          if (selectedModuleIndex === null && processedModules.length > 0) {
+            const firstModule = processedModules[0];
+            setSelectedModuleIndex(0);
+            // Convert topics to lessons
+            const topicsAsLessons: Lesson[] = firstModule.topics
+              .sort((a, b) => a.order - b.order)
+              .map((topic) => ({
+                id: topic.id,
+                title: topic.name,
+                content: topic.content,
+                completed: learningProgressService.isLessonCompleted(
+                  courseId,
+                  moduleId,
+                  `${firstModule.id}-${topic.id}`
+                ),
+                order: topic.order,
+              }));
+            setLessons(topicsAsLessons);
+            setCurrentLesson(0);
+          } else if (selectedModuleIndex !== null && processedModules[selectedModuleIndex]) {
+            const selectedModule = processedModules[selectedModuleIndex];
+            const topicsAsLessons: Lesson[] = selectedModule.topics
+              .sort((a, b) => a.order - b.order)
+              .map((topic) => ({
+                id: topic.id,
+                title: topic.name,
+                content: topic.content,
+                completed: learningProgressService.isLessonCompleted(
+                  courseId,
+                  moduleId,
+                  `${selectedModule.id}-${topic.id}`
+                ),
+                order: topic.order,
+              }));
+            setLessons(topicsAsLessons);
+            setCurrentLesson(0);
+          } else {
+            setLessons([]);
+          }
         } else {
+          // No modules found - log for debugging
+          console.warn('No modules found in subject:', subject);
+          console.warn('Subject keys:', Object.keys(subject || {}));
+          setSubjectModules([]);
           setLessons([]);
         }
       } catch (error) {
-        console.error('Error loading module and lessons:', error);
+        console.error('Error loading subject and modules:', error);
         setLessons([]);
         setModuleTitle('');
+        setSubjectModules([]);
       } finally {
         setLoading(false);
       }
     };
 
-    loadModuleAndLessons();
+    loadSubjectAndModules();
   }, [courseId, moduleId]);
+
+  // Convert module topics to lessons - defined before use
+  const loadTopicsFromModule = React.useCallback((module: Module) => {
+    if (!module || !module.topics || module.topics.length === 0) {
+      setLessons([]);
+      return;
+    }
+
+    // Convert topics to lessons format
+    const topicsAsLessons: Lesson[] = module.topics
+      .sort((a, b) => a.order - b.order)
+      .map((topic) => ({
+        id: topic.id,
+        title: topic.name,
+        content: topic.content,
+        completed: learningProgressService.isLessonCompleted(
+          courseId,
+          moduleId,
+          `${module.id}-${topic.id}`
+        ),
+        order: topic.order,
+      }));
+
+    setLessons(topicsAsLessons);
+    setCurrentLesson(0);
+  }, [courseId, moduleId]);
+
+  // Ensure first module is selected when modules are loaded
+  useEffect(() => {
+    if (subjectModules.length > 0 && selectedModuleIndex === null) {
+      setSelectedModuleIndex(0);
+      const firstModule = subjectModules[0];
+      loadTopicsFromModule(firstModule);
+    }
+  }, [subjectModules.length, selectedModuleIndex, loadTopicsFromModule]);
+
+  // Handle module selection
+  const handleModuleSelect = (moduleIndex: number) => {
+    if (moduleIndex >= 0 && moduleIndex < subjectModules.length) {
+      setSelectedModuleIndex(moduleIndex);
+      const selectedModule = subjectModules[moduleIndex];
+      loadTopicsFromModule(selectedModule);
+    }
+  };
 
   const handleLessonComplete = async () => {
     const currentLessonData = lessons[currentLesson];
@@ -257,6 +420,10 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
         currentLessonIndex={currentLesson}
         onLessonClick={handleLessonClick}
         moduleTitle={moduleTitle}
+        modules={subjectModules}
+        selectedModuleIndex={selectedModuleIndex}
+        onModuleSelect={handleModuleSelect}
+        courseTitle={courseTitle}
       >
         <div className="space-y-6">
           <div className="flex items-center justify-between">
@@ -265,7 +432,7 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
               className="text-primary hover:underline flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to Modules
+              Back to Subjects
             </Link>
           </div>
           <div className="glass p-6 rounded-xl text-center">
@@ -284,6 +451,10 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
         currentLessonIndex={currentLesson}
         onLessonClick={handleLessonClick}
         moduleTitle={moduleTitle}
+        modules={subjectModules}
+        selectedModuleIndex={selectedModuleIndex}
+        onModuleSelect={handleModuleSelect}
+        courseTitle={courseTitle}
       >
         <div className="space-y-6">
           <div className="flex items-center justify-between">
@@ -292,7 +463,7 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
               className="text-primary hover:underline flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to Modules
+              Back to Subjects
             </Link>
           </div>
           <div className="glass p-6 rounded-xl">
@@ -311,6 +482,10 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
       currentLessonIndex={currentLesson}
       onLessonClick={handleLessonClick}
       moduleTitle={moduleTitle}
+      modules={subjectModules}
+      selectedModuleIndex={selectedModuleIndex}
+      onModuleSelect={handleModuleSelect}
+      courseTitle={courseTitle}
     >
       <div className="space-y-6" ref={contentRef}>
         <div className="flex items-center justify-between">
@@ -319,7 +494,7 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
             className="text-primary hover:underline flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back to Modules
+            Back to Subjects
           </Link>
         </div>
 
@@ -331,7 +506,9 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
           {moduleTitle && (
             <div className="mb-4">
               <h1 className="text-3xl font-bold text-text mb-2">{moduleTitle}</h1>
-              <p className="text-textSecondary text-sm">Course: {courseId}</p>
+              {courseTitle && (
+                <p className="text-textSecondary text-sm">Course: {courseTitle}</p>
+              )}
             </div>
           )}
           

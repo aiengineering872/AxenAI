@@ -47,7 +47,7 @@ export default function LearningHubPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch courses + modules from Firebase ONLY (no hardcoded)
+  // Fetch courses from Firebase
   useEffect(() => {
     const load = async () => {
       try {
@@ -56,10 +56,10 @@ export default function LearningHubPage() {
         // Get all courses
         const firebaseCourses = await adminService.getCourses();
 
-        // Get all modules
+        // Get all modules (subjects)
         const allModules = await adminService.getModules();
 
-        // Merge modules into courses - only use Firebase data
+        // Merge modules into courses
         const finalCourses = firebaseCourses.map((course: any) => {
           const courseModules = allModules
             .filter((m: any) => m.courseId === course.id)
@@ -70,7 +70,7 @@ export default function LearningHubPage() {
                 ...module,
                 progress: prog.progress,
                 weeks: module.duration || '',
-                difficulty: module.difficulty || '',
+                difficulty: module.difficulty || 'beginner',
               } as Module;
             });
 
@@ -84,7 +84,7 @@ export default function LearningHubPage() {
         setCourses(finalCourses);
       } catch (err) {
         console.error('Error loading courses:', err);
-        setCourses([]); // no fallback, pure dynamic
+        setCourses([]);
       } finally {
         setLoading(false);
       }
@@ -93,7 +93,7 @@ export default function LearningHubPage() {
     load();
   }, []);
 
-  // Update progress whenever course changes
+  // Update progress when course is selected
   useEffect(() => {
     if (!selectedCourse) return;
 
@@ -159,7 +159,7 @@ export default function LearningHubPage() {
             ))}
           </div>
         ) : (
-          // Modules List
+          // Subjects List
           <div>
             <button
               onClick={() => setSelectedCourse(null)}
@@ -175,15 +175,11 @@ export default function LearningHubPage() {
 
             {!selectedCourseData || selectedCourseData.modules.length === 0 ? (
               <p className="text-textSecondary text-center py-12">
-                No modules available for this course.
+                No subjects available for this course.
               </p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {selectedCourseData.modules.map((module) => {
-                  const moduleHref = module.id && selectedCourse 
-                    ? `/learning/${selectedCourse}/${module.id}` 
-                    : '#';
-                  
                   return (
                     <motion.div
                       key={module.id}
@@ -229,7 +225,7 @@ export default function LearningHubPage() {
 
                       {module.id && selectedCourse ? (
                         <Link
-                          href={moduleHref}
+                          href={`/learning/${selectedCourse}/${module.id}`}
                           className="w-full py-3 bg-gradient-to-r from-[#ff8c42] via-[#ff6b35] to-[#ff4500] text-white rounded-lg flex justify-center gap-2 items-center transition-all hover:scale-105 cursor-pointer relative z-10"
                           prefetch={true}
                         >

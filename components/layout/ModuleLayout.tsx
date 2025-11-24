@@ -6,6 +6,19 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { ModuleSidebar } from './ModuleSidebar';
 
+interface Module {
+  id: string;
+  number: string;
+  name: string;
+  order: number;
+  topics: Array<{
+    id: string;
+    name: string;
+    content: string;
+    order: number;
+  }>;
+}
+
 interface ModuleLayoutProps {
   children: ReactNode;
   courseId: string;
@@ -13,6 +26,10 @@ interface ModuleLayoutProps {
   currentLessonIndex: number;
   onLessonClick: (index: number) => void;
   moduleTitle?: string;
+  modules?: Module[];
+  selectedModuleIndex?: number | null;
+  onModuleSelect?: (index: number) => void;
+  courseTitle?: string;
 }
 
 export const ModuleLayout: React.FC<ModuleLayoutProps> = ({
@@ -22,6 +39,10 @@ export const ModuleLayout: React.FC<ModuleLayoutProps> = ({
   currentLessonIndex,
   onLessonClick,
   moduleTitle,
+  modules,
+  selectedModuleIndex,
+  onModuleSelect,
+  courseTitle,
 }) => {
   const { user, firebaseUser, loading } = useAuth();
   const router = useRouter();
@@ -33,16 +54,28 @@ export const ModuleLayout: React.FC<ModuleLayoutProps> = ({
     }
   }, [loading, user, firebaseUser, router]);
 
-  const formatPathname = (pathname: string) => {
+  const formatPathname = () => {
     if (!pathname || pathname === '/') return 'Dashboard';
-    const parts = pathname.replace(/^\//, '').split('/');
-    return parts
-      .map((part) => part.replace(/-/g, ' '))
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' › ');
+    
+    // Build breadcrumb with actual names instead of IDs
+    const parts: string[] = ['Learning'];
+    
+    if (courseTitle) {
+      parts.push(courseTitle);
+    } else if (pathname.includes('/learning/')) {
+      parts.push('Course');
+    }
+    
+    if (moduleTitle) {
+      parts.push(moduleTitle);
+    } else if (pathname.includes('/learning/') && pathname.split('/').length > 3) {
+      parts.push('Subject');
+    }
+    
+    return parts.join(' › ');
   };
 
-  const pageTitle = formatPathname(pathname || '');
+  const pageTitle = formatPathname();
 
   if (loading) {
     return (
@@ -57,16 +90,19 @@ export const ModuleLayout: React.FC<ModuleLayoutProps> = ({
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen md:h-screen bg-background md:overflow-hidden">
       <ModuleSidebar
         moduleId={moduleId}
         courseId={courseId}
         currentLessonIndex={currentLessonIndex}
         onLessonClick={onLessonClick}
         moduleTitle={moduleTitle}
+        modules={modules}
+        selectedModuleIndex={selectedModuleIndex}
+        onModuleSelect={onModuleSelect}
       />
       
-      <main className="flex-1 overflow-x-hidden md:ml-0 relative z-10">
+      <main className="flex-1 min-h-screen md:max-h-screen overflow-x-hidden overflow-y-visible md:overflow-y-auto relative z-10">
         <div className="sticky top-0 z-20 bg-card/80 backdrop-blur-sm border-b border-card md:mt-0 mt-16">
           <div className="flex items-center justify-between px-4 md:px-6 py-3">
             <div>

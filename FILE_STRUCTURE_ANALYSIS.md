@@ -129,8 +129,7 @@ components/
 │
 ├── admin/                      # Admin panel components
 │   ├── CourseModal.tsx         # Course creation/editing modal
-│   ├── ModuleModal.tsx         # Module management modal
-│   └── ProjectModal.tsx       # Project management modal
+│   └── ProjectModal.tsx        # Project management modal
 │
 └── activity/                   # Activity tracking
     └── UserActivityTracker.tsx # Tracks user activity

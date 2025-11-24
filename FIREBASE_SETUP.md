@@ -137,18 +137,6 @@ service cloud.firestore {
       }
     }
     
-    // Modules collection
-    match /modules/{moduleId} {
-      allow read: if request.auth != null;
-      allow write: if isAdmin();
-    }
-    
-    // Lessons collection
-    match /lessons/{lessonId} {
-      allow read: if request.auth != null;
-      allow write: if isAdmin();
-    }
-    
     // Quizzes collection
     match /quizzes/{quizId} {
       allow read: if request.auth != null;
