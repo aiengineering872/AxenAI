@@ -1,8 +1,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, UploadCloud } from 'lucide-react';
 import { adminService } from '@/lib/services/adminService';
+import { storage } from '@/lib/firebase/config';
+import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
 
 interface TopicModalProps {
   isOpen: boolean;
@@ -17,6 +19,8 @@ const defaultForm = {
   name: '',
   content: '',
   order: 0,
+  pptTitle: '',
+  pptUrl: '',
 };
 
 export const TopicModal: React.FC<TopicModalProps> = ({
@@ -29,12 +33,18 @@ export const TopicModal: React.FC<TopicModalProps> = ({
 }) => {
   const [formData, setFormData] = useState(defaultForm);
   const [loading, setLoading] = useState(false);
+  const [pptFile, setPptFile] = useState<File | null>(null);
+  const [pptUploading, setPptUploading] = useState(false);
+  const [pptUploadProgress, setPptUploadProgress] = useState(0);
   const isEditMode = Boolean(topic);
 
   useEffect(() => {
     if (!isOpen) {
       setFormData(defaultForm);
       setLoading(false);
+      setPptFile(null);
+      setPptUploading(false);
+      setPptUploadProgress(0);
       return;
     }
 
@@ -43,11 +53,69 @@ export const TopicModal: React.FC<TopicModalProps> = ({
         name: topic.name ?? '',
         content: topic.content ?? '',
         order: topic.order ?? 0,
+        pptTitle: topic.pptTitle ?? '',
+        pptUrl: topic.pptUrl ?? '',
       });
     } else {
       setFormData(defaultForm);
     }
   }, [isOpen, topic]);
+
+  const handlePptFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setPptFile(file);
+  };
+
+  const handlePptUpload = async () => {
+    if (!pptFile) {
+      alert('Please choose a PPT file before uploading.');
+      return;
+    }
+
+    if (!storage) {
+      alert('Firebase storage is not configured. Please provide a public PPT link instead.');
+      return;
+    }
+
+    try {
+      setPptUploading(true);
+      setPptUploadProgress(0);
+      const timestamp = Date.now();
+      const sanitizedName = pptFile.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9.\-_]/g, '');
+      const storagePath = `ppts/${subjectId}/${moduleId}/${timestamp}-${sanitizedName}`;
+      const storageRef = ref(storage, storagePath);
+      const uploadTask = uploadBytesResumable(storageRef, pptFile);
+
+      const downloadUrl = await new Promise<string>((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+            setPptUploadProgress(progress);
+          },
+          (error) => reject(error),
+          async () => {
+            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(downloadUrl);
+          }
+        );
+      });
+
+      setFormData((prev) => ({ ...prev, pptUrl: downloadUrl }));
+      setPptFile(null);
+      setPptUploadProgress(100);
+      alert('PPT uploaded successfully! Link has been attached to this topic.');
+    } catch (error: any) {
+      console.error('Error uploading PPT:', error);
+      const message =
+        error?.code === 'storage/unauthorized'
+          ? 'Upload blocked by storage rules. Please ensure your Firebase Storage rules allow admin users to upload.'
+          : error?.message || 'Failed to upload PPT. Please try again or use a public link instead.';
+      alert(message);
+    } finally {
+      setPptUploading(false);
+    }
+  };
 
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -64,7 +132,7 @@ export const TopicModal: React.FC<TopicModalProps> = ({
     setLoading(true);
     try {
       // Get current subject data
-      const subjectData = await adminService.getModule(subjectId);
+      const subjectData: any = await adminService.getModule(subjectId);
       if (!subjectData?.modules) {
         throw new Error('Subject or modules not found');
       }
@@ -84,6 +152,8 @@ export const TopicModal: React.FC<TopicModalProps> = ({
                     name: formData.name,
                     content: formData.content,
                     order: formData.order,
+                    pptTitle: formData.pptTitle,
+                    pptUrl: formData.pptUrl,
                   }
                 : {
                     // Preserve all topic fields
@@ -91,6 +161,8 @@ export const TopicModal: React.FC<TopicModalProps> = ({
                     name: t.name || '',
                     content: t.content || '',
                     order: t.order ?? 0,
+                    pptTitle: t.pptTitle || '',
+                    pptUrl: t.pptUrl || '',
                   }
             );
           } else {
@@ -100,6 +172,8 @@ export const TopicModal: React.FC<TopicModalProps> = ({
               name: formData.name,
               content: formData.content,
               order: formData.order,
+              pptTitle: formData.pptTitle,
+              pptUrl: formData.pptUrl,
             };
             updatedTopics = [...topics, newTopic];
           }
@@ -119,12 +193,16 @@ export const TopicModal: React.FC<TopicModalProps> = ({
           number: m.number || String(index + 1),
           name: m.name || '',
           order: m.order ?? index,
-          topics: Array.isArray(m.topics) ? m.topics.map((t: any, tIndex: number) => ({
-            id: t.id || `topic-${index}-${tIndex}`,
-            name: t.name || '',
-            content: t.content || '',
-            order: t.order ?? tIndex,
-          })) : [],
+          topics: Array.isArray(m.topics)
+            ? m.topics.map((t: any, tIndex: number) => ({
+                id: t.id || `topic-${index}-${tIndex}`,
+                name: t.name || '',
+                content: t.content || '',
+                order: t.order ?? tIndex,
+                pptTitle: t.pptTitle || '',
+                pptUrl: t.pptUrl || '',
+              }))
+            : [],
         };
       });
 
@@ -146,7 +224,7 @@ export const TopicModal: React.FC<TopicModalProps> = ({
       await adminService.updateModule(subjectId, dataToSave);
       
       // Verify the save by reading it back
-      const verifyData = await adminService.getModule(subjectId);
+      const verifyData: any = await adminService.getModule(subjectId);
       console.log('Verified saved data - Modules count:', verifyData?.modules?.length);
       console.log('Verified saved data - Modules:', verifyData?.modules);
       
@@ -224,6 +302,71 @@ export const TopicModal: React.FC<TopicModalProps> = ({
             />
           </div>
 
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-textSecondary">
+                PPT Title
+              </label>
+              <input
+                value={formData.pptTitle}
+                onChange={(event) => handleChange('pptTitle', event.target.value)}
+                className="w-full rounded-lg border border-card bg-card px-4 py-3 text-text focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="e.g., Python Basics Slides"
+              />
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-textSecondary">
+                PPT Link / URL
+              </label>
+              <input
+                type="url"
+                value={formData.pptUrl}
+                onChange={(event) => handleChange('pptUrl', event.target.value)}
+                className="w-full rounded-lg border border-card bg-card px-4 py-3 text-text focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder="https://..."
+              />
+              <p className="mt-1 text-xs text-textSecondary">
+                Provide a publicly accessible PPT link (Google Slides, OneDrive, etc.)
+              </p>
+              <div className="mt-4 space-y-3">
+                <label className="block text-sm font-medium text-textSecondary">
+                  Or Upload PPT File
+                </label>
+                <input
+                  type="file"
+                  accept=".ppt,.pptx,.pdf"
+                  onChange={handlePptFileChange}
+                  className="w-full rounded-lg border border-dashed border-card bg-card/50 px-4 py-2 text-sm text-text"
+                />
+                <button
+                  type="button"
+                  onClick={handlePptUpload}
+                  disabled={!pptFile || pptUploading}
+                  className="inline-flex items-center gap-2 rounded-lg border border-primary/50 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <UploadCloud className="h-4 w-4" />
+                  {pptUploading ? 'Uploading...' : pptFile ? `Upload ${pptFile.name}` : 'Upload PPT'}
+                </button>
+                {pptUploading && (
+                  <div className="space-y-1">
+                    <div className="h-2 w-full rounded-full bg-card/50">
+                      <div
+                        className="h-2 rounded-full bg-primary transition-all"
+                        style={{ width: `${pptUploadProgress}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-textSecondary">{pptUploadProgress}%</p>
+                  </div>
+                )}
+                {pptFile && !pptUploading && (
+                  <p className="text-xs text-textSecondary">
+                    Selected: {pptFile.name} ({(pptFile.size / (1024 * 1024)).toFixed(2)} MB)
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="mb-2 block text-sm font-medium text-textSecondary">
               Order
@@ -247,7 +390,7 @@ export const TopicModal: React.FC<TopicModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || pptUploading}
               className="flex-1 rounded-lg bg-primary px-4 py-3 text-white transition disabled:opacity-50"
             >
               {loading ? 'Saving...' : topic ? 'Update Topic' : 'Create Topic'}

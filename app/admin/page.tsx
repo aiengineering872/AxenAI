@@ -5,20 +5,22 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Users, BookOpen, FlaskConical, MessageSquare, Plus, Edit, Trash2, TrendingUp, Clock, ChevronDown } from 'lucide-react';
+import { Users, BookOpen, FlaskConical, MessageSquare, Plus, Edit, Trash2, TrendingUp, Clock, ChevronDown, ListChecks } from 'lucide-react';
 import { adminService } from '@/lib/services/adminService';
 import CourseModal from '@/components/admin/CourseModal';
 import ProjectModal from '@/components/admin/ProjectModal';
 import SubjectModal from '@/components/admin/SubjectModal';
 import TopicModal from '@/components/admin/TopicModal';
+import QuizModal, { QuizQuestion } from '@/components/admin/QuizModal';
 
-type AdminTab = 'dashboard' | 'courses' | 'subjects' | 'topics' | 'projects' | 'users' | 'faq';
+type AdminTab = 'dashboard' | 'courses' | 'subjects' | 'topics' | 'quizzes' | 'projects' | 'users' | 'faq';
 
 const tabs: Array<{ id: AdminTab; label: string; icon: React.ElementType }> = [
   { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
   { id: 'courses', label: 'Courses', icon: BookOpen },
   { id: 'subjects', label: 'Subjects', icon: BookOpen },
   { id: 'topics', label: 'Topics', icon: BookOpen },
+  { id: 'quizzes', label: 'Quizzes', icon: ListChecks },
   { id: 'projects', label: 'Projects', icon: FlaskConical },
   { id: 'users', label: 'Users', icon: Users },
   { id: 'faq', label: 'FAQ', icon: MessageSquare },
@@ -89,6 +91,15 @@ export default function AdminPanelPage() {
   const [topics, setTopics] = useState<any[]>([]);
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [editingTopic, setEditingTopic] = useState<any>(null);
+  // Quiz management state
+  const [quizCourseId, setQuizCourseId] = useState<string>('');
+  const [quizSubjectId, setQuizSubjectId] = useState<string>('');
+  const [quizModuleId, setQuizModuleId] = useState<string>('');
+  const [quizModules, setQuizModules] = useState<any[]>([]);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [showQuizModal, setShowQuizModal] = useState(false);
+  const [editingQuizQuestion, setEditingQuizQuestion] = useState<QuizQuestion | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
   
   // Sync courses from learning hub to Firebase
   const syncCoursesFromLearningHub = async () => {
@@ -108,7 +119,7 @@ export default function AdminPanelPage() {
       ];
       
       // List of course IDs that should NOT be auto-created (removed from hardcoded list)
-      const excludedCourseIds = ['ai-engineering'];
+      const excludedCourseIds = ['ai-engineering', 'aiml-engineering'];
       
       // Add courses that don't exist in Firebase and are not excluded
       for (const course of learningHubCourses) {
@@ -127,9 +138,36 @@ export default function AdminPanelPage() {
       console.error('Error syncing courses:', error);
     }
   };
+
+  const loadQuizQuestions = useCallback(
+    async (subjectId: string, moduleId: string) => {
+      if (!subjectId || !moduleId) {
+        setQuizQuestions([]);
+        return;
+      }
+      try {
+        setQuizLoading(true);
+        const quizData = await adminService.getQuiz(subjectId, moduleId);
+        if (quizData?.questions && Array.isArray(quizData.questions)) {
+          const sorted = [...quizData.questions].sort(
+            (a: QuizQuestion, b: QuizQuestion) => (a.order ?? 0) - (b.order ?? 0)
+          );
+          setQuizQuestions(sorted);
+        } else {
+          setQuizQuestions([]);
+        }
+      } catch (error) {
+        console.error('Error loading quiz questions:', error);
+        setQuizQuestions([]);
+      } finally {
+        setQuizLoading(false);
+      }
+    },
+    []
+  );
   
   // Debug: Log courses and hasCourses state
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (skipSync = false) => {
     setLoading(true);
     try {
       if (activeTab === 'dashboard') {
@@ -141,8 +179,10 @@ export default function AdminPanelPage() {
         const coursesData = await adminService.getCourses();
         setCourses(coursesData);
         
-        // Sync courses from learning hub if they don't exist
-        await syncCoursesFromLearningHub();
+        // Sync courses from learning hub if they don't exist (skip after delete)
+        if (!skipSync) {
+          await syncCoursesFromLearningHub();
+        }
       }
 
       if (activeTab === 'subjects') {
@@ -188,6 +228,36 @@ export default function AdminPanelPage() {
         }
       }
 
+      if (activeTab === 'quizzes') {
+        await syncCoursesFromLearningHub();
+        const coursesData = await adminService.getCourses();
+        setCourses(coursesData);
+
+        if (quizCourseId) {
+          const subjectsData = await adminService.getModules(quizCourseId);
+          setSubjects(subjectsData);
+        } else {
+          setSubjects([]);
+        }
+
+        if (quizSubjectId) {
+          const subjectData = await adminService.getModule(quizSubjectId);
+          if (subjectData?.modules && Array.isArray(subjectData.modules)) {
+            setQuizModules(subjectData.modules);
+          } else {
+            setQuizModules([]);
+          }
+        } else {
+          setQuizModules([]);
+        }
+
+        if (quizSubjectId && quizModuleId) {
+          await loadQuizQuestions(quizSubjectId, quizModuleId);
+        } else {
+          setQuizQuestions([]);
+        }
+      }
+
       if (activeTab === 'projects') {
         const projectsData = await adminService.getProjects();
         setProjects(projectsData);
@@ -201,7 +271,7 @@ export default function AdminPanelPage() {
       console.error('Error loading admin data:', error);
     }
     setLoading(false);
-  }, [activeTab, selectedCourseId]);
+  }, [activeTab, selectedCourseId, quizCourseId, quizSubjectId, quizModuleId, loadQuizQuestions]);
 
   // Sync courses when admin panel loads (only once)
   useEffect(() => {
@@ -244,12 +314,41 @@ export default function AdminPanelPage() {
   const handleDeleteCourse = async (courseId: string) => {
     if (!confirm('Delete this course? This action cannot be undone.')) return;
 
+    if (!courseId) {
+      alert('Error: Course ID is missing. Cannot delete course.');
+      console.error('Course ID is missing');
+      return;
+    }
+
     try {
+      console.log('Attempting to delete course with ID:', courseId);
+      
+      // Optimistically remove from UI immediately
+      setCourses(prevCourses => prevCourses.filter(c => c.id !== courseId));
+      
       await adminService.deleteCourse(courseId);
-      await loadData();
-    } catch (error) {
+      console.log('Course deleted successfully from Firebase');
+      
+      // Reload data without syncing to prevent auto-recreation of deleted courses
+      // This ensures we have the latest state from Firebase
+      await loadData(true);
+      
+      // Show success message
+      console.log('Course deletion completed successfully');
+    } catch (error: any) {
       console.error('Error deleting course:', error);
-      alert('Failed to delete course. Please try again.');
+      console.error('Error details:', {
+        code: error?.code,
+        message: error?.message,
+        courseId: courseId
+      });
+      
+      // Restore the course in the UI if deletion failed
+      await loadData(true);
+      
+      // Show detailed error message
+      const errorMessage = error?.message || 'Unknown error occurred';
+      alert(`Failed to delete course: ${errorMessage}\n\nError code: ${error?.code || 'N/A'}\n\nPlease check the console for more details.`);
     }
   };
 
@@ -263,6 +362,72 @@ export default function AdminPanelPage() {
       console.error('Error deleting subject:', error);
       alert('Failed to delete subject. Please try again.');
     }
+  };
+
+  const handleQuizCourseSelect = (value: string) => {
+    setQuizCourseId(value);
+    setQuizSubjectId('');
+    setQuizModuleId('');
+    setQuizModules([]);
+    setQuizQuestions([]);
+  };
+
+  const handleQuizSubjectSelect = (value: string) => {
+    setQuizSubjectId(value);
+    setQuizModuleId('');
+    setQuizQuestions([]);
+  };
+
+  const handleQuizModuleSelect = async (value: string) => {
+    setQuizModuleId(value);
+    if (value && quizSubjectId) {
+      await loadQuizQuestions(quizSubjectId, value);
+    } else {
+      setQuizQuestions([]);
+    }
+  };
+
+  const persistQuizChanges = async (updatedQuestions: QuizQuestion[]) => {
+    if (!quizCourseId || !quizSubjectId || !quizModuleId) {
+      alert('Please select a course, subject, and module first.');
+      return;
+    }
+    const courseMeta = courses.find((course) => course.id === quizCourseId);
+    const subjectMeta = subjects.find((subject) => subject.id === quizSubjectId);
+    const moduleMeta = quizModules.find((module) => module.id === quizModuleId);
+    try {
+      await adminService.saveQuiz({
+        courseId: quizCourseId,
+        courseTitle: courseMeta?.title,
+        subjectId: quizSubjectId,
+        subjectTitle: subjectMeta?.title,
+        moduleId: quizModuleId,
+        moduleName: moduleMeta?.name,
+        questions: updatedQuestions,
+      });
+      const sorted = [...updatedQuestions].sort(
+        (a, b) => (a.order ?? 0) - (b.order ?? 0)
+      );
+      setQuizQuestions(sorted);
+    } catch (error) {
+      console.error('Error saving quiz:', error);
+      alert('Failed to save quiz. Please try again.');
+    }
+  };
+
+  const handleSaveQuizQuestion = async (question: QuizQuestion) => {
+    const updatedQuestions = editingQuizQuestion
+      ? quizQuestions.map((existing) => (existing.id === question.id ? question : existing))
+      : [...quizQuestions, question];
+    await persistQuizChanges(updatedQuestions);
+    setShowQuizModal(false);
+    setEditingQuizQuestion(null);
+  };
+
+  const handleDeleteQuizQuestion = async (questionId: string) => {
+    if (!confirm('Delete this question?')) return;
+    const updatedQuestions = quizQuestions.filter((question) => question.id !== questionId);
+    await persistQuizChanges(updatedQuestions);
   };
 
   if (authLoading) {
@@ -378,7 +543,22 @@ export default function AdminPanelPage() {
                           >
                             <Edit className="h-5 w-5 text-textSecondary" />
                           </button>
-                          <button onClick={() => handleDeleteCourse(course.id)} className="rounded p-2 transition hover:bg-card">
+                          <button 
+                            onClick={() => {
+                              console.log('Delete button clicked for course:', {
+                                id: course.id,
+                                title: course.title,
+                                fullCourse: course
+                              });
+                              if (!course.id) {
+                                alert('Error: Course ID is missing. Cannot delete course.');
+                                console.error('Course object:', course);
+                                return;
+                              }
+                              handleDeleteCourse(course.id);
+                            }} 
+                            className="rounded p-2 transition hover:bg-card"
+                          >
                             <Trash2 className="h-5 w-5 text-red-400" />
                           </button>
                         </div>
@@ -714,6 +894,193 @@ export default function AdminPanelPage() {
           </motion.div>
         )}
 
+        {activeTab === 'quizzes' && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-text">Practice Quizzes</h2>
+                <p className="text-sm text-textSecondary">
+                  Link quizzes to each module so learners can test their knowledge.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setEditingQuizQuestion(null);
+                  setShowQuizModal(true);
+                }}
+                disabled={!quizModuleId}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-white transition ${
+                  quizModuleId ? 'bg-primary hover:bg-primary/90' : 'bg-primary/40 cursor-not-allowed'
+                }`}
+              >
+                <Plus className="h-5 w-5" />
+                Add Question
+              </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-textSecondary">Select Course</label>
+                <select
+                  value={quizCourseId}
+                  onChange={(event) => handleQuizCourseSelect(event.target.value)}
+                  className="w-full rounded-lg border border-card bg-card px-4 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">Choose a course</option>
+                  {courses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-textSecondary">Select Subject</label>
+                <select
+                  value={quizSubjectId}
+                  onChange={(event) => handleQuizSubjectSelect(event.target.value)}
+                  disabled={!quizCourseId}
+                  className="w-full rounded-lg border border-card bg-card px-4 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                >
+                  <option value="">Choose a subject</option>
+                  {subjects
+                    .filter((subject) => subject.courseId === quizCourseId)
+                    .map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.title}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-textSecondary">Select Module</label>
+                <select
+                  value={quizModuleId}
+                  onChange={(event) => handleQuizModuleSelect(event.target.value)}
+                  disabled={!quizSubjectId}
+                  className="w-full rounded-lg border border-card bg-card px-4 py-2 text-text focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+                >
+                  <option value="">Choose a module</option>
+                  {quizModules.map((module: any, index: number) => (
+                    <option key={module.id} value={module.id}>
+                      {module.number ? `Module ${module.number}` : `Module ${index + 1}`} - {module.name || 'Untitled'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {!quizCourseId && (
+              <div className="rounded-lg bg-card/60 p-4 text-sm text-textSecondary">
+                Select a course to begin managing quizzes.
+              </div>
+            )}
+
+            {quizCourseId && !quizSubjectId && (
+              <div className="rounded-lg bg-card/60 p-4 text-sm text-textSecondary">
+                Choose a subject to see its modules.
+              </div>
+            )}
+
+            {quizCourseId && quizSubjectId && !quizModuleId && (
+              <div className="rounded-lg bg-card/60 p-4 text-sm text-textSecondary">
+                Select a module to view or add quiz questions.
+              </div>
+            )}
+
+            {quizModuleId && (
+              <div className="glass rounded-xl p-6">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-text">
+                      Questions ({quizQuestions.length})
+                    </h3>
+                    <p className="text-sm text-textSecondary">
+                      {quizModules.find((module) => module.id === quizModuleId)?.name || 'Selected module'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setEditingQuizQuestion(null);
+                      setShowQuizModal(true);
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-primary/50 px-4 py-2 text-sm text-primary transition hover:bg-primary/10"
+                  >
+                    <Plus className="h-4 w-4" />
+                    New Question
+                  </button>
+                </div>
+
+                {quizLoading ? (
+                  <div className="py-8 text-center text-textSecondary">Loading questions...</div>
+                ) : quizQuestions.length === 0 ? (
+                  <div className="py-8 text-center text-textSecondary">
+                    No questions yet. Click “New Question” to create one.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {quizQuestions.map((question, index) => (
+                      <div key={question.id} className="rounded-xl border border-card/50 bg-card/40 p-4">
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <p className="font-semibold text-text">
+                              Q{index + 1}. {question.prompt}
+                            </p>
+                            <p className="text-xs uppercase tracking-widest text-textSecondary mt-1">
+                              Difficulty: {question.difficulty ?? 'easy'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingQuizQuestion(question);
+                                setShowQuizModal(true);
+                              }}
+                              className="rounded p-2 transition hover:bg-card"
+                            >
+                              <Edit className="h-5 w-5 text-textSecondary" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteQuizQuestion(question.id)}
+                              className="rounded p-2 transition hover:bg-card"
+                            >
+                              <Trash2 className="h-5 w-5 text-red-400" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 space-y-2">
+                          {question.options?.map((option, optionIndex) => (
+                            <div
+                              key={optionIndex}
+                              className={`rounded-lg border px-3 py-2 text-sm ${
+                                optionIndex === question.correctOptionIndex
+                                  ? 'border-primary/60 bg-primary/10 text-primary'
+                                  : 'border-card/40 bg-card/30 text-text'
+                              }`}
+                            >
+                              {optionIndex + 1}. {option}
+                              {optionIndex === question.correctOptionIndex && (
+                                <span className="ml-2 text-xs uppercase tracking-wide">Correct</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {question.explanation && (
+                          <div className="mt-3 rounded-lg bg-card/30 p-3 text-sm text-textSecondary">
+                            <span className="font-medium text-text">Explanation:</span> {question.explanation}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </motion.div>
+        )}
+
         {activeTab === 'projects' && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
             <div className="flex items-center justify-between">
@@ -959,6 +1326,16 @@ export default function AdminPanelPage() {
           topic={editingTopic}
           moduleId={selectedModuleId}
           subjectId={selectedSubjectId}
+        />
+
+        <QuizModal
+          isOpen={showQuizModal}
+          onClose={() => {
+            setShowQuizModal(false);
+            setEditingQuizQuestion(null);
+          }}
+          onSave={handleSaveQuizQuestion}
+          question={editingQuizQuestion ?? undefined}
         />
         
       </div>

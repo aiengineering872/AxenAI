@@ -5,10 +5,10 @@
 :root {
   --color-primary: #ff6b35;
   --color-secondary: #ff4500;
-  --color-background: #000000;
-  --color-card: #0d0d0d;
+  --color-background: #0a1128;
+  --color-card: #1a2332;
   --color-text: #ffffff;
-  --color-textSecondary: #b3b3b3;
+  --color-textSecondary: #a0aec0;
   --color-accent: #ff6b35;
   --color-glow: rgba(255, 107, 53, 0.5);
 }
@@ -33,10 +33,35 @@ body {
   font-family: var(--font-body, 'Inter', sans-serif);
 }
 
-/* Flat black theme: disable background overlays */
-body::before,
+/* Dark navy theme with glowing orange grid pattern */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(rgba(255, 107, 53, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 107, 53, 0.1) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.3;
+}
+
+/* Additional subtle glow effects */
 body::after {
-  content: none;
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 20% 50%, rgba(255, 107, 53, 0.08) 0%, transparent 50%),
+              radial-gradient(circle at 80% 80%, rgba(255, 69, 0, 0.08) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .text-display {
@@ -145,7 +170,7 @@ body::after {
 
 /* Glass morphism effect */
 .glass {
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(26, 31, 58, 0.6);
   backdrop-filter: blur(16px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
@@ -155,7 +180,7 @@ body::after {
 
 /* Enhanced glass on hover */
 .glass:hover {
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(26, 31, 58, 0.8);
   border-color: rgba(255, 107, 53, 0.3);
   transition: all 0.3s ease;
 }
@@ -204,7 +229,7 @@ body::after {
 .card-highlight {
   border: 2px solid rgba(255, 107, 53, 0.8);
   box-shadow: 0 0 30px rgba(255, 107, 53, 0.6), 0 0 60px rgba(255, 69, 0, 0.4);
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(26, 31, 58, 0.8);
 }
 
 /* Scrollbar styling */
@@ -255,13 +280,13 @@ input[type="password"],
 input[type="number"],
 textarea {
   color: var(--color-text) !important;
-  background-color: rgba(0, 0, 0, 0.85) !important;
+  background-color: rgba(26, 35, 50, 0.95) !important;
 }
 
 /* Specific fix for simulator textarea */
 textarea {
   color: #ffffff !important;
-  background-color: rgba(0, 0, 0, 0.85) !important;
+  background-color: rgba(26, 35, 50, 0.95) !important;
 }
 
 input::placeholder,

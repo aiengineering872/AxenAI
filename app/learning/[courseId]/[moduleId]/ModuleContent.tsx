@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ModuleLayout } from '@/components/layout/ModuleLayout';
 import { motion } from 'framer-motion';
-import { CheckCircle, ArrowLeft, ArrowRight, ExternalLink, Video, Code2, Brain, Target, Grid3x3, ChevronRight, Code } from 'lucide-react';
+import { CheckCircle, ArrowLeft, ArrowRight, ExternalLink, Video, Code2, Brain, Target, Grid3x3, ChevronRight, Code, ListChecks, FileText, Volume2, Square } from 'lucide-react';
 import Link from 'next/link';
 import { learningProgressService } from '@/lib/services/learningProgressService';
 import { adminService } from '@/lib/services/adminService';
@@ -13,6 +13,8 @@ interface Topic {
   name: string;
   content: string;
   order: number;
+  pptTitle?: string;
+  pptUrl?: string;
 }
 
 interface Module {
@@ -32,6 +34,18 @@ interface Lesson {
   simulators?: string[];
   completed: boolean;
   order?: number;
+  pptTitle?: string;
+  pptUrl?: string;
+}
+
+interface QuizQuestion {
+  id: string;
+  prompt: string;
+  options: string[];
+  correctOptionIndex: number;
+  explanation?: string;
+  order?: number;
+  difficulty?: string;
 }
 
 interface ModuleContentProps {
@@ -48,6 +62,61 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
   const [subjectModules, setSubjectModules] = useState<Module[]>([]);
   const [selectedModuleIndex, setSelectedModuleIndex] = useState<number | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [quizState, setQuizState] = useState<'idle' | 'active' | 'review'>('idle');
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
+  const [quizScore, setQuizScore] = useState(0);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+
+  const loadQuizForModule = React.useCallback(
+    async (subjectId: string, subModuleId: string | undefined) => {
+      if (!subModuleId) {
+        setQuizQuestions([]);
+        setQuizState('idle');
+        setSelectedAnswers({});
+        setQuizScore(0);
+        return;
+      }
+      try {
+        const quizData = await adminService.getQuiz(subjectId, subModuleId);
+        if (quizData?.questions && Array.isArray(quizData.questions)) {
+          const sorted = [...quizData.questions].sort(
+            (a: QuizQuestion, b: QuizQuestion) => (a.order ?? 0) - (b.order ?? 0)
+          );
+          setQuizQuestions(sorted);
+        } else {
+          setQuizQuestions([]);
+        }
+      } catch (error) {
+        console.error('Error loading quiz:', error);
+        setQuizQuestions([]);
+      } finally {
+        setQuizState('idle');
+        setSelectedAnswers({});
+        setQuizScore(0);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      setSpeechSupported(true);
+    }
+    return () => {
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
+  }, [moduleId, currentLesson]);
 
   // Load subject (moduleId) and its modules from Firebase
   useEffect(() => {
@@ -120,6 +189,8 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
                       name: t.name || '',
                       content: t.content || '',
                       order: t.order ?? topicIndex,
+                      pptTitle: t.pptTitle || '',
+                      pptUrl: t.pptUrl || '',
                     }));
                 }
               } catch (error) {
@@ -160,9 +231,12 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
                   `${firstModule.id}-${topic.id}`
                 ),
                 order: topic.order,
+                pptTitle: topic.pptTitle,
+                pptUrl: topic.pptUrl,
               }));
             setLessons(topicsAsLessons);
             setCurrentLesson(0);
+            void loadQuizForModule(moduleId, firstModule.id);
           } else if (selectedModuleIndex !== null && processedModules[selectedModuleIndex]) {
             const selectedModule = processedModules[selectedModuleIndex];
             const topicsAsLessons: Lesson[] = selectedModule.topics
@@ -177,11 +251,18 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
                   `${selectedModule.id}-${topic.id}`
                 ),
                 order: topic.order,
+                pptTitle: topic.pptTitle,
+                pptUrl: topic.pptUrl,
               }));
             setLessons(topicsAsLessons);
             setCurrentLesson(0);
+            void loadQuizForModule(moduleId, selectedModule.id);
           } else {
             setLessons([]);
+            setQuizQuestions([]);
+            setQuizState('idle');
+            setSelectedAnswers({});
+            setQuizScore(0);
           }
         } else {
           // No modules found - log for debugging
@@ -189,6 +270,10 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
           console.warn('Subject keys:', Object.keys(subject || {}));
           setSubjectModules([]);
           setLessons([]);
+          setQuizQuestions([]);
+          setQuizState('idle');
+          setSelectedAnswers({});
+          setQuizScore(0);
         }
       } catch (error) {
         console.error('Error loading subject and modules:', error);
@@ -201,7 +286,7 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
     };
 
     loadSubjectAndModules();
-  }, [courseId, moduleId]);
+  }, [courseId, moduleId, loadQuizForModule]);
 
   // Convert module topics to lessons - defined before use
   const loadTopicsFromModule = React.useCallback((module: Module) => {
@@ -223,6 +308,8 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
           `${module.id}-${topic.id}`
         ),
         order: topic.order,
+        pptTitle: topic.pptTitle,
+        pptUrl: topic.pptUrl,
       }));
 
     setLessons(topicsAsLessons);
@@ -244,6 +331,7 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
       setSelectedModuleIndex(moduleIndex);
       const selectedModule = subjectModules[moduleIndex];
       loadTopicsFromModule(selectedModule);
+      void loadQuizForModule(moduleId, selectedModule.id);
     }
   };
 
@@ -264,6 +352,49 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
       true
     );
   };
+
+  const handleQuizStart = () => {
+    if (quizQuestions.length === 0) return;
+    setQuizState('active');
+    setSelectedAnswers({});
+    setQuizScore(0);
+  };
+
+  const handleQuizOptionSelect = (questionId: string, optionIndex: number) => {
+    if (quizState === 'review') return;
+    setSelectedAnswers((prev) => ({
+      ...prev,
+      [questionId]: optionIndex,
+    }));
+  };
+
+  const handleQuizSubmit = () => {
+    if (quizQuestions.length === 0) return;
+    let score = 0;
+    quizQuestions.forEach((question) => {
+      if (selectedAnswers[question.id] === question.correctOptionIndex) {
+        score += 1;
+      }
+    });
+    setQuizScore(score);
+    setQuizState('review');
+  };
+
+  const handleQuizRetake = () => {
+    setSelectedAnswers({});
+    setQuizScore(0);
+    setQuizState('active');
+  };
+
+  const handleQuizExit = () => {
+    setSelectedAnswers({});
+    setQuizScore(0);
+    setQuizState('idle');
+  };
+
+  const allQuizQuestionsAnswered =
+    quizQuestions.length > 0 &&
+    quizQuestions.every((question) => typeof selectedAnswers[question.id] === 'number');
 
   const handleLessonClick = (index: number) => {
     if (index >= 0 && index < lessons.length) {
@@ -412,6 +543,61 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
     );
   };
 
+  const stripMarkdown = (text: string) => {
+    if (!text) return '';
+    return text
+      .replace(/[*_~`>#-]/g, ' ')
+      .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const getSafePptUrl = (url?: string) => {
+    if (!url) return '';
+    const trimmed = url.trim();
+    if (!trimmed) return '';
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const handleOpenPpt = (pptUrl?: string) => {
+    const safeUrl = getSafePptUrl(pptUrl);
+    if (!safeUrl) {
+      alert('PPT link is not available yet.');
+      return;
+    }
+    window.open(safeUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleSpeakContent = () => {
+    if (!speechSupported || !currentLessonData?.content || typeof window === 'undefined') {
+      alert('Text to speech is not available right now.');
+      return;
+    }
+
+    try {
+      const utterance = new SpeechSynthesisUtterance(stripMarkdown(currentLessonData.content));
+      utterance.lang = 'en-IN';
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+      setIsSpeaking(true);
+    } catch (error) {
+      console.error('Speech synthesis error:', error);
+      alert('Unable to play audio for this lesson.');
+    }
+  };
+
+  const handleStopSpeaking = () => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  };
+
   if (loading) {
     return (
       <ModuleLayout
@@ -475,6 +661,11 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
     );
   }
 
+  const currentLessonData = lessons[currentLesson];
+  const currentLessonPptUrl = getSafePptUrl(currentLessonData?.pptUrl);
+  const isFirstLessonInModule = currentLesson === 0;
+  const hasCurrentLessonPpt = Boolean(currentLessonPptUrl);
+
   return (
     <ModuleLayout
       courseId={courseId}
@@ -503,18 +694,65 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
           animate={{ opacity: 1, y: 0 }}
           className="glass p-6 rounded-xl"
         >
-          {moduleTitle && (
-            <div className="mb-4">
-              <h1 className="text-3xl font-bold text-text mb-2">{moduleTitle}</h1>
-              {courseTitle && (
-                <p className="text-textSecondary text-sm">Course: {courseTitle}</p>
+          <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              {moduleTitle && (
+                <div>
+                  <h1 className="text-3xl font-bold text-text mb-2">{moduleTitle}</h1>
+                  {courseTitle && (
+                    <p className="text-textSecondary text-sm">Course: {courseTitle}</p>
+                  )}
+                </div>
               )}
+              
+              <h2 className="text-2xl font-bold text-text border-t border-card/50 pt-4 mt-4">
+                {currentLessonData?.title}
+              </h2>
             </div>
-          )}
-          
-          <h2 className="text-2xl font-bold text-text mb-4 border-t border-card/50 pt-4">
-            {lessons[currentLesson]?.title}
-          </h2>
+            
+            <div className="flex flex-col gap-3 md:flex-row">
+              {isFirstLessonInModule && (
+                <button
+                  onClick={() => handleOpenPpt(currentLessonData?.pptUrl)}
+                  disabled={!hasCurrentLessonPpt}
+                  title={
+                    hasCurrentLessonPpt
+                      ? 'Open module PPT'
+                      : 'No PPT has been added for this module yet'
+                  }
+                  className={`inline-flex items-center gap-2 self-start rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                    hasCurrentLessonPpt
+                      ? 'border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20'
+                      : 'border border-card/40 bg-card/30 text-textSecondary opacity-60 cursor-not-allowed'
+                  }`}
+                >
+                  <FileText className="h-4 w-4" />
+                  OpenPPT
+                  <ExternalLink className="h-4 w-4" />
+                </button>
+              )}
+
+              <button
+                onClick={isSpeaking ? handleStopSpeaking : handleSpeakContent}
+                disabled={!speechSupported || !currentLessonData?.content}
+                className={`inline-flex items-center gap-2 self-start rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                  !speechSupported || !currentLessonData?.content
+                    ? 'border border-card/40 bg-card/30 text-textSecondary opacity-60 cursor-not-allowed'
+                    : isSpeaking
+                    ? 'border border-primary/70 bg-primary/20 text-primary hover:bg-primary/30'
+                    : 'border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20'
+                }`}
+                title={
+                  speechSupported
+                    ? 'Listen to this lesson content'
+                    : 'Text to speech is not supported on this browser'
+                }
+              >
+                {isSpeaking ? <Square className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                {isSpeaking ? 'Stop Audio' : 'Listen'}
+              </button>
+            </div>
+          </div>
 
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-2">
@@ -537,7 +775,7 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
           </div>
 
           <div className="prose prose-invert max-w-3xl mb-6">
-            {formatContent(lessons[currentLesson]?.content || '')}
+            {formatContent(currentLessonData?.content || '')}
           </div>
 
           {/* Video Lectures and Simulators Section */}
@@ -684,13 +922,173 @@ export default function ModuleContent({ courseId, moduleId }: ModuleContentProps
           transition={{ delay: 0.2 }}
           className="glass p-6 rounded-xl"
         >
-          <h2 className="text-2xl font-bold text-text mb-4">Practice Quiz</h2>
-          <p className="text-textSecondary mb-4">
-            Test your understanding with interactive quizzes
-          </p>
-          <button className="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all">
-            Start Quiz
-          </button>
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <ListChecks className="w-5 h-5 text-primary" />
+                <h2 className="text-2xl font-bold text-text">Practice Quiz</h2>
+              </div>
+              <p className="text-textSecondary">
+                {quizQuestions.length === 0
+                  ? 'Quiz coming soon for this module.'
+                  : `Answer ${quizQuestions.length} question${quizQuestions.length === 1 ? '' : 's'} to check your understanding.`}
+              </p>
+            </div>
+            {quizQuestions.length > 0 && quizState === 'idle' && (
+              <button
+                onClick={handleQuizStart}
+                className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all"
+              >
+                Start Quiz
+              </button>
+            )}
+          </div>
+
+          {quizQuestions.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-card/60 p-6 text-center text-textSecondary">
+              No quiz has been published for this module yet.
+            </div>
+          ) : quizState === 'idle' ? (
+            <div className="rounded-lg border border-card/40 bg-card/20 p-6 text-center">
+              <p className="mb-4 text-textSecondary">
+                Ready when you are! Click the button below to begin the quiz.
+              </p>
+              <button
+                onClick={handleQuizStart}
+                className="px-6 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg transition-all"
+              >
+                Start Quiz
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-6">
+                {quizQuestions.map((question, index) => {
+                  const userAnswer = selectedAnswers[question.id];
+                  return (
+                    <div key={question.id} className="rounded-xl border border-card/50 bg-card/30 p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="font-semibold text-text">
+                            Q{index + 1}. {question.prompt}
+                          </p>
+                          <p className="text-xs uppercase tracking-widest text-textSecondary mt-1">
+                            Difficulty: {question.difficulty ?? 'easy'}
+                          </p>
+                        </div>
+                        {quizState === 'review' && (
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                              userAnswer === question.correctOptionIndex
+                                ? 'bg-green-500/20 text-green-300'
+                                : 'bg-red-500/20 text-red-300'
+                            }`}
+                          >
+                            {userAnswer === question.correctOptionIndex ? 'Correct' : 'Incorrect'}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-4 space-y-2">
+                        {question.options?.map((option, optionIndex) => {
+                          const isSelected = userAnswer === optionIndex;
+                          const isCorrect = optionIndex === question.correctOptionIndex;
+                          let optionClasses =
+                            'w-full text-left rounded-lg border px-4 py-3 text-sm transition';
+
+                          if (quizState === 'review') {
+                            if (isCorrect) {
+                              optionClasses += ' border-green-500/60 bg-green-500/10 text-green-200';
+                            } else if (isSelected) {
+                              optionClasses += ' border-red-500/60 bg-red-500/10 text-red-200';
+                            } else {
+                              optionClasses += ' border-card/40 bg-card/20 text-text';
+                            }
+                          } else {
+                            optionClasses += isSelected
+                              ? ' border-primary/60 bg-primary/10 text-primary'
+                              : ' border-card/40 bg-card/20 text-text hover:border-primary/40';
+                          }
+
+                          return (
+                            <button
+                              key={optionIndex}
+                              type="button"
+                              disabled={quizState === 'review'}
+                              onClick={() => handleQuizOptionSelect(question.id, optionIndex)}
+                              className={optionClasses}
+                            >
+                              {optionIndex + 1}. {option}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {quizState === 'review' && question.explanation && (
+                        <div className="mt-3 rounded-lg bg-card/40 p-3 text-sm text-textSecondary">
+                          <span className="font-semibold text-text">Explanation:</span> {question.explanation}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3 border-t border-card/50 pt-4 md:flex-row md:items-center md:justify-between">
+                {quizState === 'active' ? (
+                  <>
+                    <p className="text-sm text-textSecondary">
+                      {Object.keys(selectedAnswers).length} / {quizQuestions.length} answered
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={handleQuizExit}
+                        className="px-4 py-2 rounded-lg border border-card/60 text-text hover:bg-card/40 transition"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleQuizSubmit}
+                        disabled={!allQuizQuestionsAnswered}
+                        className="px-6 py-2 rounded-lg bg-primary text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Submit Answers
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-lg font-semibold text-text">
+                        Score: {quizScore} / {quizQuestions.length}
+                      </p>
+                      <p className="text-sm text-textSecondary">
+                        {quizScore === quizQuestions.length
+                          ? 'Perfect score!'
+                          : quizScore >= quizQuestions.length / 2
+                          ? 'Great job! Keep practicing to master it.'
+                          : 'Keep practicing—you got this!'}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        onClick={handleQuizRetake}
+                        className="px-4 py-2 rounded-lg border border-primary/50 text-primary hover:bg-primary/10 transition"
+                      >
+                        Retake Quiz
+                      </button>
+                      <button
+                        onClick={handleQuizExit}
+                        className="px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </motion.div>
       </div>
     </ModuleLayout>

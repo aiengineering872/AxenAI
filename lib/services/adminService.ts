@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   serverTimestamp,
+  setDoc,
 } from 'firebase/firestore';
 import { initializeFirebase, db } from '@/lib/firebase/config';
 
@@ -32,7 +33,11 @@ export const adminService = {
         return [];
       }
       const snapshot = await getDocs(query(collection(db, 'courses'), orderBy('createdAt', 'desc')));
-      return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      return snapshot.docs.map((docSnap) => {
+        const data = docSnap.data();
+        // Ensure document ID takes precedence over any id field in the data
+        return { ...data, id: docSnap.id };
+      });
     } catch (error) {
       console.error('Error fetching courses:', error);
       return []; // Return empty array on error
@@ -49,13 +54,29 @@ export const adminService = {
 
   async createCourse(courseData: Record<string, any>) {
     await ensureFirebase();
-    const docRef = await addDoc(collection(db, 'courses'), {
-      ...courseData,
-      modules: courseData.modules ?? [],
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    return docRef.id;
+    
+    // If an ID is provided, use setDoc to create with that specific ID
+    // Otherwise, use addDoc to generate a random ID
+    const { id, ...dataWithoutId } = courseData;
+    
+    if (id) {
+      const courseRef = doc(db, 'courses', id);
+      await setDoc(courseRef, {
+        ...dataWithoutId,
+        modules: dataWithoutId.modules ?? [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return id;
+    } else {
+      const docRef = await addDoc(collection(db, 'courses'), {
+        ...dataWithoutId,
+        modules: dataWithoutId.modules ?? [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return docRef.id;
+    }
   },
 
   async updateCourse(courseId: string, updates: Record<string, any>) {
@@ -67,8 +88,32 @@ export const adminService = {
   },
 
   async deleteCourse(courseId: string) {
-    await ensureFirebase();
-    await deleteDoc(doc(db, 'courses', courseId));
+    const isInitialized = await ensureFirebase();
+    if (!isInitialized || !db) {
+      throw new Error('Firebase is not initialized');
+    }
+    
+    if (!courseId) {
+      throw new Error('Course ID is required');
+    }
+    
+    console.log('Deleting course from Firestore:', courseId);
+    const courseRef = doc(db, 'courses', courseId);
+    
+    // Try to delete - Firebase will handle if document doesn't exist
+    try {
+      await deleteDoc(courseRef);
+      console.log('Course deleted successfully from Firestore');
+    } catch (error: any) {
+      // If document doesn't exist, that's okay - it's already deleted
+      if (error?.code === 'not-found' || error?.code === 'permission-denied') {
+        console.warn(`Course ${courseId} may not exist or permission denied:`, error.message);
+        // Still throw to let caller know, but with a clearer message
+        throw new Error(`Unable to delete course: ${error.message || 'Course may not exist or you may not have permission'}`);
+      }
+      // Re-throw other errors
+      throw error;
+    }
   },
 
   // ===== Modules (used as Subjects) =====
@@ -186,6 +231,57 @@ export const adminService = {
   async deleteLesson(lessonId: string) {
     await ensureFirebase();
     await deleteDoc(doc(db, 'lessons', lessonId));
+  },
+
+  // ===== Quizzes =====
+  async getQuiz(subjectId: string, moduleId: string) {
+    try {
+      const isInitialized = await ensureFirebase();
+      if (!isInitialized || !db || !subjectId || !moduleId) {
+        return null;
+      }
+      const quizRef = doc(db, 'quizzes', `${subjectId}_${moduleId}`);
+      const quizSnap = await getDoc(quizRef);
+      if (!quizSnap.exists()) return null;
+      return { id: quizSnap.id, ...quizSnap.data() };
+    } catch (error) {
+      console.error('Error fetching quiz:', error);
+      return null;
+    }
+  },
+
+  async saveQuiz(quizData: {
+    courseId: string;
+    courseTitle?: string;
+    subjectId: string;
+    subjectTitle?: string;
+    moduleId: string;
+    moduleName?: string;
+    questions: any[];
+  }) {
+    await ensureFirebase();
+    if (!db) return null;
+    const quizRef = doc(db, 'quizzes', `${quizData.subjectId}_${quizData.moduleId}`);
+    const existingSnap = await getDoc(quizRef);
+    const payload: Record<string, any> = {
+      ...quizData,
+      questions: Array.isArray(quizData.questions) ? quizData.questions : [],
+      updatedAt: serverTimestamp(),
+    };
+    if (existingSnap.exists()) {
+      payload.createdAt = existingSnap.data()?.createdAt ?? serverTimestamp();
+    } else {
+      payload.createdAt = serverTimestamp();
+    }
+    await setDoc(quizRef, payload, { merge: true });
+    return quizRef.id;
+  },
+
+  async deleteQuiz(subjectId: string, moduleId: string) {
+    await ensureFirebase();
+    if (!db) return;
+    const quizId = `${subjectId}_${moduleId}`;
+    await deleteDoc(doc(db, 'quizzes', quizId));
   },
 
   // ===== Projects =====
